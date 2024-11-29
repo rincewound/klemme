@@ -449,16 +449,24 @@ impl App {
     }
 
     fn draw_rxtxbuffer(&mut self, area: Rect, buf: &mut Frame) {
-        // copy state events to display history:
-        if let Some(ref s) = self.state_receiver {
-            while let Ok(x) = s.try_recv() {
-                self.display_history.push(x);
-            }
-        }
 
-        let mut line_index = 0;
+        self.update_history_with_incoming_data();        
         let mut analyzer_data: Vec<u8> = Vec::new();
+        let items = self.build_list_items( &mut analyzer_data);
+        let list = List::new(items)
+            .block(Block::bordered().title("History"))
+            .style(Style::new().fg(ratatui::style::Color::Gray))
+            .highlight_style(Style::new().fg(ratatui::style::Color::Red))
+            .highlight_symbol(">>")
+            .repeat_highlight_symbol(true)
+            .direction(ListDirection::BottomToTop);
 
+        buf.render_widget(list, area);
+        self.render_analyzer(area, buf, analyzer_data);
+    }
+
+    fn build_list_items(&mut self, analyzer_data: &mut Vec<u8>) -> Vec<Line<'_>> {
+        let mut line_index = 0;
         let items: Vec<Line> = self
             .display_history
             .iter()
@@ -469,12 +477,12 @@ impl App {
                 let result = match x {
                     SerialStateMessage::DataEvent(x) => {
                         let bytes = self.format_data(&x.data);
-
+    
                         let mut pre_cursor = String::from(bytes.clone());
                         let mut cursor = String::from("");
                         let mut post_cursor = String::from("");
                         let mut cursor_color = ratatui::style::Color::Black;
-
+    
                         if self.display_mode == DisplayMode::Hex && line_index == 0 {
                             // the cursor pos is always a multiple of 3:
                             let pos = self.analyzer_cursor_pos * 3;
@@ -484,9 +492,9 @@ impl App {
                                 post_cursor = String::from(&bytes[pos + 2..]);
                             }
                             cursor_color = ratatui::style::Color::Blue;
-                            analyzer_data = x.data.to_vec();
+                            *analyzer_data = x.data.to_vec();
                         }
-
+    
                         let ln = Line::from(vec![
                             x.rx_tx.to_string().fg(if x.rx_tx == RxTx::Tx {
                                 ratatui::style::Color::Green
@@ -510,21 +518,18 @@ impl App {
                 return result;
             })
             .collect();
-
-        let list = List::new(items)
-            .block(Block::bordered().title("History"))
-            .style(Style::new().fg(ratatui::style::Color::Gray))
-            .highlight_style(Style::new().fg(ratatui::style::Color::Red))
-            .highlight_symbol(">>")
-            .repeat_highlight_symbol(true)
-            .direction(ListDirection::BottomToTop);
-
-        buf.render_widget(list, area);
-
-        self.render_analyzer(area, buf, analyzer_data);
-        //buf.render_widget(block, area);
+        items
     }
-
+    
+    fn update_history_with_incoming_data(&mut self) {
+        // copy state events to display history:
+        if let Some(ref s) = self.state_receiver {
+            while let Ok(x) = s.try_recv() {
+                self.display_history.push(x);
+            }
+        }
+    }
+    
     /// Renders the analyzer window. This window will appear if the display mode is hex
     /// and the mode is analyzer. The window will contain the byte, u16, i16, u32, i32, f32, u64, i64, and f64
     /// values of the byte at the cursor position.
@@ -534,6 +539,10 @@ impl App {
         }
 
         if self.display_mode != DisplayMode::Hex {
+            return;
+        }
+
+        if self.analyzer_cursor_pos >= analyzer_data.len() {
             return;
         }
 
@@ -580,7 +589,7 @@ impl App {
             .highlight_style(Style::new().fg(ratatui::style::Color::Red))
             .highlight_symbol(">>")
             .repeat_highlight_symbol(true)
-            .direction(ListDirection::BottomToTop);
+            .direction(ListDirection::TopToBottom);
 
         //let block = Block::bordered().title("Analyzer");
         let area = Self::popup_area(area, 40, 40);
