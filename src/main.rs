@@ -10,7 +10,7 @@ use crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind};
 use ratatui::{
     layout::{Constraint, Layout, Rect},
     style::{Style, Stylize},
-    symbols:: border,
+    symbols::border,
     text::Line,
     widgets::{Block, List, ListDirection, Paragraph},
     DefaultTerminal, Frame,
@@ -158,6 +158,7 @@ pub struct App {
     display_history: Vec<SerialStateMessage>,
     command_sender: Option<Sender<SerialCommand>>,
     state_receiver: Option<Receiver<SerialStateMessage>>,
+    scroll_offset: u32,
 }
 
 impl Default for App {
@@ -176,6 +177,7 @@ impl Default for App {
             state_receiver: None,
             display_mode: DisplayMode::Hex,
             crlf: CRLFSetting::None,
+            scroll_offset: 0,
         };
 
         data
@@ -238,6 +240,8 @@ impl App {
 
     fn do_interactive_mode(&mut self, key_event: KeyEvent) {
         match key_event.code {
+            KeyCode::Up => self.scroll_up(),
+            KeyCode::Down => self.scroll_down(),
             KeyCode::Esc => self.enter_settings(),
             KeyCode::Char(x) => self.send_buffer.push(x as u8),
             KeyCode::Backspace => {
@@ -251,6 +255,9 @@ impl App {
     fn handle_key_event(&mut self, key_event: KeyEvent) {
         if key_event.code == KeyCode::F(2) {
             self.rotate_display_mode();
+        }
+        if key_event.code == KeyCode::F(3) {
+            self.display_history.clear();
         }
 
         match self.mode {
@@ -302,10 +309,63 @@ impl App {
         buf.render_widget(opts.block(block), area);
     }
 
+    fn control_char_to_string(c: u8) -> String {
+        let chr = match c {
+            0x00 => "NUL",
+            0x01 => "SOH",
+            0x02 => "STX",
+            0x03 => "ETX",
+            0x04 => "EOT",
+            0x05 => "ENQ",
+            0x06 => "ACK",
+            0x07 => "BEL",
+            0x08 => "BS",
+            0x09 => "HT",
+            0x0A => "LF",
+            0x0B => "VT",
+            0x0C => "FF",
+            0x0D => "CR",
+            0x0E => "SO",
+            0x0F => "SI",
+            0x10 => "DLE",
+            0x11 => "DC1",
+            0x12 => "DC2",
+            0x13 => "DC3",
+            0x14 => "DC4",
+            0x15 => "NAK",
+            0x16 => "SYN",
+            0x17 => "ETB",
+            0x18 => "CAN",
+            0x19 => "EM",
+            0x1A => "SUB",
+            0x1B => "ESC",
+            0x1C => "FS",
+            0x1D => "GS",
+            0x1E => "RS",
+            0x1F => "US",
+            _ => " ",
+        };
+        return format!("<{}>", chr);
+    }
+
     fn format_data(&self, data: &[u8]) -> String {
         match self.display_mode {
             DisplayMode::Hex => data.iter().map(|x| format!("{:02X} ", x)).collect(),
-            DisplayMode::Ascii => data.iter().map(|x| format!("{}", (*x) as char)).collect(),
+            DisplayMode::Ascii => {
+                // replace control bytes by their name:
+                let data = data
+                    .iter()
+                    .map(|x| {
+                        if !(*x as char).is_control() {
+                            return format!("{}", (*x) as char);
+                        }
+                        let chr = Self::control_char_to_string(*x);
+                        format!("{}", chr)
+                    })
+                    .collect::<Vec<String>>()
+                    .join("");
+                data
+            }
             DisplayMode::Decimal => data
                 .iter()
                 .map(|x| x.to_string())
@@ -315,7 +375,7 @@ impl App {
                 // all bytes, that are printable characters are printed as such, otherwise hex
                 data.iter()
                     .map(|x| {
-                        if (*x as char).is_ascii() {
+                        if (*x as char).is_ascii() && !(*x as char).is_control() {
                             return format!("{}", (*x) as char);
                         }
                         format!("{:02X}", *x)
@@ -326,7 +386,7 @@ impl App {
             DisplayMode::MixedDec => data
                 .iter()
                 .map(|x| {
-                    if (*x as char).is_ascii() {
+                    if (*x as char).is_ascii() && !(*x as char).is_control() {
                         return format!("{}", (*x) as char);
                     }
                     format!("{}", *x)
@@ -349,6 +409,7 @@ impl App {
             .display_history
             .iter()
             .rev()
+            .skip(self.scroll_offset as usize)
             .take(10)
             .map(|x| {
                 let result = match x {
@@ -442,10 +503,6 @@ impl App {
                 }
                 self.port = port.file_name().unwrap().to_str().unwrap().to_string();
                 port_found = true;
-                println!(
-                    "Port selected: {}",
-                    port.file_name().unwrap().to_str().unwrap()
-                );
             }
             if !port_found {
                 self.port = first_port_name.to_string();
@@ -644,5 +701,13 @@ impl App {
         if let Some(p) = &self.command_sender {
             p.send(cmd).unwrap();
         }
+    }
+
+    fn scroll_up(&mut self) {
+        self.scroll_offset = self.scroll_offset.saturating_add(1);
+    }
+
+    fn scroll_down(&mut self) {
+        self.scroll_offset = self.scroll_offset.saturating_sub(1);
     }
 }
