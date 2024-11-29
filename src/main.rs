@@ -644,7 +644,7 @@ impl App {
             let mut state = PortThreadState::Stopped;
             loop {
                 let mut data_to_send: Vec<u8> = vec![];
-                if let Ok(cmd) = rx.recv_timeout(Duration::from_micros(1)) {
+                if let Ok(cmd) = rx.try_recv(){
                     match cmd {
                         SerialCommand::Send(data) => {
                             data_to_send = data;
