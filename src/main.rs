@@ -50,7 +50,7 @@ pub enum Mode {
     #[default]
     Settings,
     Interactive,
-    Analyzer
+    Analyzer,
 }
 
 #[derive(Debug, Default, PartialEq)]
@@ -72,7 +72,7 @@ pub enum DisplayMode {
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum InputMode {
     Default,
-    Hex
+    Hex,
 }
 
 #[derive(Debug, PartialEq, Clone, Copy)]
@@ -113,7 +113,7 @@ impl Display for CRLFSetting {
     }
 }
 
-impl Display for InputMode{
+impl Display for InputMode {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             InputMode::Default => write!(f, "Default"),
@@ -178,7 +178,7 @@ pub struct App {
     state_receiver: Option<Receiver<SerialStateMessage>>,
     scroll_offset: u32,
     analyzer_cursor_pos: usize,
-    input_mode: InputMode
+    input_mode: InputMode,
 }
 
 impl Default for App {
@@ -199,7 +199,7 @@ impl Default for App {
             crlf: CRLFSetting::None,
             scroll_offset: 0,
             analyzer_cursor_pos: 0,
-            input_mode: InputMode::Default
+            input_mode: InputMode::Default,
         };
 
         data
@@ -267,14 +267,13 @@ impl App {
             KeyCode::Down => self.scroll_down(),
             KeyCode::Esc => self.enter_settings(),
             KeyCode::Char(x) => {
-                if self.input_mode == InputMode::Hex {                    
-                    if x.is_ascii_hexdigit() || x == ' ' {                                               
+                if self.input_mode == InputMode::Hex {
+                    if x.is_ascii_hexdigit() || x == ' ' {
                         self.send_buffer.push(x as u8);
                     }
+                } else {
+                    self.send_buffer.push(x as u8)
                 }
-                else {
-                    self.send_buffer.push(x as u8)    
-                }                
             }
             KeyCode::Backspace => {
                 self.send_buffer.pop();
@@ -310,7 +309,7 @@ impl App {
                 return;
             }
             Mode::Interactive => self.do_interactive_mode(key_event),
-            Mode::Analyzer => self.do_analyzer_mode(key_event)
+            Mode::Analyzer => self.do_analyzer_mode(key_event),
         }
     }
 
@@ -448,9 +447,8 @@ impl App {
         let [area] = horizontal.areas(area);
         area
     }
-    
-    
-    fn draw_rxtxbuffer(&mut self, area: Rect, buf: &mut Frame) {    
+
+    fn draw_rxtxbuffer(&mut self, area: Rect, buf: &mut Frame) {
         // copy state events to display history:
         if let Some(ref s) = self.state_receiver {
             while let Ok(x) = s.try_recv() {
@@ -459,7 +457,7 @@ impl App {
         }
 
         let mut line_index = 0;
-        let mut analyzer_data : Vec<u8> = Vec::new();        
+        let mut analyzer_data: Vec<u8> = Vec::new();
 
         let items: Vec<Line> = self
             .display_history
@@ -483,13 +481,12 @@ impl App {
                             if pos <= bytes.len() - 3 {
                                 pre_cursor = String::from(&bytes[0..pos]);
                                 cursor = String::from(&bytes[pos..pos + 2]);
-                                post_cursor = String::from(&bytes[pos + 2..]);                                   
+                                post_cursor = String::from(&bytes[pos + 2..]);
                             }
                             cursor_color = ratatui::style::Color::Blue;
                             analyzer_data = x.data.to_vec();
                         }
 
-                                                
                         let ln = Line::from(vec![
                             x.rx_tx.to_string().fg(if x.rx_tx == RxTx::Tx {
                                 ratatui::style::Color::Green
@@ -498,7 +495,9 @@ impl App {
                             }),
                             format!(":").fg(ratatui::style::Color::Gray),
                             format!("{}", pre_cursor).fg(ratatui::style::Color::Gray),
-                            format!("{}", cursor).fg(ratatui::style::Color::Gray).bg(cursor_color),
+                            format!("{}", cursor)
+                                .fg(ratatui::style::Color::Gray)
+                                .bg(cursor_color),
                             format!("{}", post_cursor).fg(ratatui::style::Color::Gray),
                         ]);
                         line_index += 1;
@@ -528,7 +527,7 @@ impl App {
 
     /// Renders the analyzer window. This window will appear if the display mode is hex
     /// and the mode is analyzer. The window will contain the byte, u16, i16, u32, i32, f32, u64, i64, and f64
-    /// values of the byte at the cursor position. 
+    /// values of the byte at the cursor position.
     fn render_analyzer(&mut self, area: Rect, buf: &mut Frame<'_>, analyzer_data: Vec<u8>) {
         if self.mode != Mode::Analyzer {
             return;
@@ -538,40 +537,42 @@ impl App {
             return;
         }
 
-        let mut items : Vec<String> = vec![];
+        let mut items: Vec<String> = vec![];
         // Use the cursor position to obtain the analyzer data: 1 byte, 2 byte, 4 bytes
         let one_byte = analyzer_data[self.analyzer_cursor_pos];
         items.push(format!("binary {:08b}", one_byte));
         items.push(format!("u8: {}", one_byte));
 
         if (self.analyzer_cursor_pos as i32) <= (analyzer_data.len() as i32 - 2) {
-            let two_bytes = analyzer_data[self.analyzer_cursor_pos..=self.analyzer_cursor_pos + 1].to_vec();    
+            let two_bytes =
+                analyzer_data[self.analyzer_cursor_pos..=self.analyzer_cursor_pos + 1].to_vec();
             let two_as_u16 = u16::from_le_bytes(two_bytes.clone().try_into().unwrap());
             let two_as_i16 = i16::from_le_bytes(two_bytes.clone().try_into().unwrap());
             items.push(format!("u16: {}", two_as_u16));
             items.push(format!("i16: {}", two_as_i16));
         }
-        
+
         if (self.analyzer_cursor_pos as i32) <= (analyzer_data.len() as i32 - 4) {
-            let four_bytes = analyzer_data[self.analyzer_cursor_pos..=self.analyzer_cursor_pos + 3].to_vec();    
-            let four_as_u32 = u32::from_le_bytes(four_bytes.clone().try_into().unwrap());        
+            let four_bytes =
+                analyzer_data[self.analyzer_cursor_pos..=self.analyzer_cursor_pos + 3].to_vec();
+            let four_as_u32 = u32::from_le_bytes(four_bytes.clone().try_into().unwrap());
             let four_as_i32 = i32::from_le_bytes(four_bytes.clone().try_into().unwrap());
             let four_as_f32 = f32::from_le_bytes(four_bytes.clone().try_into().unwrap());
             items.push(format!("u32: {}", four_as_u32));
             items.push(format!("i32: {}", four_as_i32));
             items.push(format!("f32: {}", four_as_f32));
         }
-        
+
         if (self.analyzer_cursor_pos as i32) <= (analyzer_data.len() as i32 - 8) {
-            let eight_bytes = analyzer_data[self.analyzer_cursor_pos..=self.analyzer_cursor_pos + 7].to_vec();    
+            let eight_bytes =
+                analyzer_data[self.analyzer_cursor_pos..=self.analyzer_cursor_pos + 7].to_vec();
             let eight_as_u64 = u64::from_le_bytes(eight_bytes.clone().try_into().unwrap());
             let eight_as_i64 = i64::from_le_bytes(eight_bytes.clone().try_into().unwrap());
-            let eight_as_f64 = f64::from_le_bytes(eight_bytes.clone().try_into().unwrap());            
+            let eight_as_f64 = f64::from_le_bytes(eight_bytes.clone().try_into().unwrap());
             items.push(format!("u64: {}", eight_as_u64));
             items.push(format!("i64: {}", eight_as_i64));
             items.push(format!("f64: {}", eight_as_f64));
-        }                
-
+        }
 
         let list = List::new(items)
             .block(Block::bordered().title("Analyzer"))
@@ -583,11 +584,11 @@ impl App {
 
         //let block = Block::bordered().title("Analyzer");
         let area = Self::popup_area(area, 40, 40);
-        buf.render_widget(Clear, area); //this clears out the background        
-        //buf.render_widget(block, area);        
+        buf.render_widget(Clear, area); //this clears out the background
+                                        //buf.render_widget(block, area);
         buf.render_widget(list, area);
     }
-    
+
     fn draw_tx_line(&self, area: Rect, buf: &mut Frame) {
         let highlight_color = if self.mode == Mode::Interactive {
             ratatui::style::Color::Red
@@ -605,7 +606,7 @@ impl App {
             "TX".fg(ratatui::style::Color::LightGreen),
             format!("({}):", self.input_mode).fg(ratatui::style::Color::Gray),
             format!("{}", String::from_utf8_lossy(&self.send_buffer))
-                .fg(ratatui::style::Color::Gray),            
+                .fg(ratatui::style::Color::Gray),
         ]));
 
         buf.render_widget(pg.block(block), area);
@@ -772,8 +773,7 @@ impl App {
         self.mode = Mode::Settings;
     }
 
-    fn enter_analyzer_mode(&mut self)
-    {
+    fn enter_analyzer_mode(&mut self) {
         self.send_command(SerialCommand::Stop);
         self.mode = Mode::Analyzer;
     }
@@ -784,7 +784,6 @@ impl App {
     }
 
     fn send_tx_buffer(&mut self) {
-        
         self.apply_input_mode();
         self.apply_crlf_setting();
         self.send_command(SerialCommand::Send(self.send_buffer.clone()));
@@ -808,8 +807,7 @@ impl App {
             _ => {}
         }
     }
-    
-    
+
     /// if hex input, convert data to bytes by aggregating 2 hex chars into one byte
     fn apply_input_mode(&mut self) {
         // if hex input, convert data to bytes by aggregating 2 hex chars into one byte
@@ -817,16 +815,19 @@ impl App {
             let mut new_buffer: Vec<u8> = vec![];
             let mut idx: usize = 0;
             while idx < self.send_buffer.len() - 1 {
-                if self.send_buffer[idx] as char == ' ' {idx += 1; continue}
+                if self.send_buffer[idx] as char == ' ' {
+                    idx += 1;
+                    continue;
+                }
                 let b0 = (self.send_buffer[idx] as char).to_digit(16).unwrap() as u8;
-                let b1 = (self.send_buffer[idx+1] as char).to_digit(16).unwrap() as u8;
+                let b1 = (self.send_buffer[idx + 1] as char).to_digit(16).unwrap() as u8;
                 new_buffer.push(self.two_hex_bytes_to_char(b0, b1) as u8);
                 idx += 2;
             }
             self.send_buffer = new_buffer;
         }
     }
-    
+
     /// Starts a background thread that is responsible for managing the serial port.
     /// This thread will receive commands from the main thread and act accordingly.
     /// The main thread should send commands on the `rx` channel and the background
@@ -850,7 +851,7 @@ impl App {
             let mut state = PortThreadState::Stopped;
             loop {
                 let mut data_to_send: Vec<u8> = vec![];
-                if let Ok(cmd) = rx.try_recv(){
+                if let Ok(cmd) = rx.try_recv() {
                     match cmd {
                         SerialCommand::Send(data) => {
                             data_to_send = data;
@@ -916,7 +917,7 @@ impl App {
     fn scroll_down(&mut self) {
         self.scroll_offset = self.scroll_offset.saturating_sub(1);
     }
-    
+
     fn cursor_left(&mut self) {
         self.analyzer_cursor_pos = self.analyzer_cursor_pos.saturating_sub(1);
     }
@@ -924,5 +925,4 @@ impl App {
     fn cursor_right(&mut self) {
         self.analyzer_cursor_pos += 1;
     }
-    
 }
