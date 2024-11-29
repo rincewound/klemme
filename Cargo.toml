@@ -1,0 +1,9 @@
+[package]
+name = "klemme"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+crossterm = "0.28.1"
+ratatui = "0.29.0"
+serial2 = "0.2.28"
