@@ -82,10 +82,20 @@ pub enum CRLFSetting {
     LF,
     CRLF,
 }
-
+#[derive(Debug)]
 enum PortThreadState {
     Stopped,
     Running(SerialContext),
+}
+
+impl PartialEq for PortThreadState {
+    fn eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (PortThreadState::Stopped, PortThreadState::Stopped) => true,
+            (PortThreadState::Running(_), PortThreadState::Running(_)) => true,
+            _ => false,
+        }
+    }
 }
 
 enum SerialCommand {
@@ -449,10 +459,9 @@ impl App {
     }
 
     fn draw_rxtxbuffer(&mut self, area: Rect, buf: &mut Frame) {
-
-        self.update_history_with_incoming_data();        
+        self.update_history_with_incoming_data();
         let mut analyzer_data: Vec<u8> = Vec::new();
-        let items = self.build_list_items( &mut analyzer_data);
+        let items = self.build_list_items(&mut analyzer_data);
         let list = List::new(items)
             .block(Block::bordered().title("History"))
             .style(Style::new().fg(ratatui::style::Color::Gray))
@@ -477,13 +486,16 @@ impl App {
                 let result = match x {
                     SerialStateMessage::DataEvent(x) => {
                         let bytes = self.format_data(&x.data);
-    
+
                         let mut pre_cursor = String::from(bytes.clone());
                         let mut cursor = String::from("");
                         let mut post_cursor = String::from("");
                         let mut cursor_color = ratatui::style::Color::Black;
-    
-                        if self.display_mode == DisplayMode::Hex && line_index == 0 {
+
+                        if self.display_mode == DisplayMode::Hex
+                            && line_index == 0
+                            && self.mode == Mode::Analyzer
+                        {
                             // the cursor pos is always a multiple of 3:
                             let pos = self.analyzer_cursor_pos * 3;
                             if pos <= bytes.len() - 3 {
@@ -494,7 +506,7 @@ impl App {
                             cursor_color = ratatui::style::Color::Blue;
                             *analyzer_data = x.data.to_vec();
                         }
-    
+
                         let ln = Line::from(vec![
                             x.rx_tx.to_string().fg(if x.rx_tx == RxTx::Tx {
                                 ratatui::style::Color::Green
@@ -520,7 +532,7 @@ impl App {
             .collect();
         items
     }
-    
+
     fn update_history_with_incoming_data(&mut self) {
         // copy state events to display history:
         if let Some(ref s) = self.state_receiver {
@@ -529,7 +541,7 @@ impl App {
             }
         }
     }
-    
+
     /// Renders the analyzer window. This window will appear if the display mode is hex
     /// and the mode is analyzer. The window will contain the byte, u16, i16, u32, i32, f32, u64, i64, and f64
     /// values of the byte at the cursor position.
@@ -866,12 +878,16 @@ impl App {
                             data_to_send = data;
                         }
                         SerialCommand::Stop => {
-                            let _ = tx.send(SerialStateMessage::Stopped);
-                            state = PortThreadState::Stopped;
+                            if state != PortThreadState::Stopped {
+                                let _ = tx.send(SerialStateMessage::Stopped);
+                                state = PortThreadState::Stopped;
+                            }
                         }
                         SerialCommand::Start(ctx) => {
-                            let _ = tx.send(SerialStateMessage::Started);
-                            state = PortThreadState::Running(ctx);
+                            if state == PortThreadState::Stopped {
+                                let _ = tx.send(SerialStateMessage::Started);
+                                state = PortThreadState::Running(ctx);
+                            }
                         }
                     }
 
