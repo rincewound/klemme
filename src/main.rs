@@ -43,6 +43,8 @@ const CRLF_SETTINGS: [CRLFSetting; 4] = [
     CRLFSetting::CRLF,
 ];
 
+const INPUT_MODES: [InputMode; 2] = [InputMode::Default, InputMode::Hex];
+
 #[derive(Debug, Default, PartialEq)]
 pub enum Mode {
     #[default]
@@ -64,6 +66,12 @@ pub enum DisplayMode {
     Ascii,
     MixedHex,
     MixedDec,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum InputMode {
+    Default,
+    Hex
 }
 
 #[derive(Debug, PartialEq, Clone, Copy)]
@@ -100,6 +108,15 @@ impl Display for CRLFSetting {
             CRLFSetting::CR => write!(f, "CR"),
             CRLFSetting::LF => write!(f, "LF"),
             CRLFSetting::CRLF => write!(f, "CRLF"),
+        }
+    }
+}
+
+impl Display for InputMode{
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            InputMode::Default => write!(f, "Default"),
+            InputMode::Hex => write!(f, "Hex"),
         }
     }
 }
@@ -159,6 +176,7 @@ pub struct App {
     command_sender: Option<Sender<SerialCommand>>,
     state_receiver: Option<Receiver<SerialStateMessage>>,
     scroll_offset: u32,
+    inputMode: InputMode
 }
 
 impl Default for App {
@@ -178,6 +196,7 @@ impl Default for App {
             display_mode: DisplayMode::Hex,
             crlf: CRLFSetting::None,
             scroll_offset: 0,
+            inputMode: InputMode::Default
         };
 
         data
@@ -243,11 +262,21 @@ impl App {
             KeyCode::Up => self.scroll_up(),
             KeyCode::Down => self.scroll_down(),
             KeyCode::Esc => self.enter_settings(),
-            KeyCode::Char(x) => self.send_buffer.push(x as u8),
+            KeyCode::Char(x) => {
+                if self.inputMode == InputMode::Hex {                    
+                    if x.is_ascii_hexdigit() || x == ' ' {                                               
+                        self.send_buffer.push(x as u8);
+                    }
+                }
+                else {
+                    self.send_buffer.push(x as u8)    
+                }                
+            }
             KeyCode::Backspace => {
                 self.send_buffer.pop();
             }
             KeyCode::Enter => self.send_tx_buffer(),
+            KeyCode::F(4) => self.rotate_input_mode(),
             _ => {}
         }
     }
@@ -461,9 +490,10 @@ impl App {
             .border_style(Style::default().fg(highlight_color));
 
         let pg = Paragraph::new(Line::from(vec![
-            "TX:".fg(ratatui::style::Color::LightGreen),
+            "TX".fg(ratatui::style::Color::LightGreen),
+            format!("({}):", self.inputMode).fg(ratatui::style::Color::Gray),
             format!("{}", String::from_utf8_lossy(&self.send_buffer))
-                .fg(ratatui::style::Color::Gray),
+                .fg(ratatui::style::Color::Gray),            
         ]));
 
         buf.render_widget(pg.block(block), area);
@@ -564,6 +594,16 @@ impl App {
         self.crlf = CRLF_SETTINGS[selected_idx];
     }
 
+    fn rotate_input_mode(&mut self) {
+        let mut selected_idx = INPUT_MODES
+            .iter()
+            .position(|&x| x == self.inputMode)
+            .unwrap_or(0);
+        selected_idx += 1;
+        selected_idx %= INPUT_MODES.len();
+        self.inputMode = INPUT_MODES[selected_idx];
+    }
+
     fn enter_interactive_mode(&mut self) {
         self.mode = Mode::Interactive;
 
@@ -620,7 +660,26 @@ impl App {
         self.mode = Mode::Settings;
     }
 
+    fn two_hex_bytes_to_char(&self, b0: u8, b1: u8) -> char {
+        let byte = (b0 << 4) + b1;
+        char::from_u32(byte as u32).unwrap()
+    }
+
     fn send_tx_buffer(&mut self) {
+        // if hex input, convert data to bytes by aggregating 2 hex chars into one byte
+        if self.inputMode == InputMode::Hex {
+            let mut new_buffer: Vec<u8> = vec![];
+            let mut idx: usize = 0;
+            while idx < self.send_buffer.len() - 1 {
+                if self.send_buffer[idx] as char == ' ' {idx += 1; continue}
+                let b0 = (self.send_buffer[idx] as char).to_digit(16).unwrap() as u8;
+                let b1 = (self.send_buffer[idx+1] as char).to_digit(16).unwrap() as u8;
+                new_buffer.push(self.two_hex_bytes_to_char(b0, b1) as u8);
+                idx += 2;
+            }
+            self.send_buffer = new_buffer;
+        }
+
         match self.crlf {
             CRLFSetting::CRLF => {
                 self.send_buffer.push(b'\r');
