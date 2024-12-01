@@ -256,7 +256,6 @@ impl App {
     fn do_settings_mode(&mut self, key_event: KeyEvent) {
         match key_event.code {
             KeyCode::Char('q') => self.exit(),
-
             KeyCode::Char('p') => self.rotate_port(),
             KeyCode::Char('b') => self.rotate_baudrate(),
             KeyCode::Char('s') => self.rotate_stopbits(),
@@ -264,9 +263,7 @@ impl App {
             KeyCode::Char('d') => self.rotate_databits(),
             KeyCode::Char('m') => self.rotate_display_mode(),
             KeyCode::Char('c') => self.rotate_crlf_setting(),
-            KeyCode::Char(' ') => self.enter_interactive_mode(),
             KeyCode::Enter => self.enter_interactive_mode(),
-            KeyCode::Backspace => self.enter_analyzer_mode(),
             _ => {}
         }
     }
@@ -274,8 +271,7 @@ impl App {
     fn do_interactive_mode(&mut self, key_event: KeyEvent) {
         match key_event.code {
             KeyCode::Up => self.scroll_up(),
-            KeyCode::Down => self.scroll_down(),
-            KeyCode::Esc => self.enter_settings(),
+            KeyCode::Down => self.scroll_down(),            
             KeyCode::Char(x) => {
                 if self.input_mode == InputMode::Hex {
                     if x.is_ascii_hexdigit() || x == ' ' {
@@ -289,14 +285,12 @@ impl App {
                 self.send_buffer.pop();
             }
             KeyCode::Enter => self.send_tx_buffer(),
-            KeyCode::F(4) => self.rotate_input_mode(),
             _ => {}
         }
     }
 
     fn do_analyzer_mode(&mut self, key_event: KeyEvent) {
-        match key_event.code {
-            KeyCode::Esc => self.enter_settings(),
+        match key_event.code {            
             KeyCode::Left => self.cursor_left(),
             KeyCode::Right => self.cursor_right(),
             KeyCode::Up => self.scroll_up(),
@@ -308,10 +302,22 @@ impl App {
     fn handle_key_event(&mut self, key_event: KeyEvent) {
         if key_event.code == KeyCode::F(2) {
             self.rotate_display_mode();
-        }
+        }      
         if key_event.code == KeyCode::F(3) {
-            self.display_history.clear();
+            self.rotate_input_mode();
         }
+        if key_event.code == KeyCode::F(5) {
+            self.enter_settings_mode();
+        }
+        if key_event.code == KeyCode::F(6) {
+            self.enter_interactive_mode();
+        }
+        if key_event.code == KeyCode::F(7) {
+            self.enter_analyzer_mode();
+        }
+        if key_event.code == KeyCode::F(10) {
+            self.display_history.clear();
+        }   
 
         match self.mode {
             Mode::Settings => {
@@ -633,6 +639,10 @@ impl App {
         buf.render_widget(pg.block(block), area);
     }
 
+    /// Renders the application's UI. The UI is split into three rows.
+    /// The first row contains the header, which displays the current settings.
+    /// The second row contains the RX/TX buffer, which displays the data sent and received over the serial port.
+    /// The third row contains the TX line, which is where the user can enter data to send over the serial port.
     pub fn draw(&mut self, frame: &mut Frame) {
         let chunks = Layout::vertical([
             Constraint::Length(3),
@@ -645,6 +655,11 @@ impl App {
         self.draw_tx_line(chunks[2], frame);
     }
 
+    /// Rotates the serial port to the next available serial port.
+    ///
+    /// Enumerates all available serial ports, and sets the serial port to the next available port
+    /// in the list. If the current port is not found in the list, or if the list is empty, the
+    /// port is set to the first port in the list.
     fn rotate_port(&mut self) {
         // enumerate comports
         let mut port_found = false;
@@ -728,6 +743,9 @@ impl App {
         self.crlf = CRLF_SETTINGS[selected_idx];
     }
 
+    /// Rotates the input mode through the list of available input modes. The input modes
+    /// are cycled in order, so if the input mode is Default, it will be set to Hex, and
+    /// vice versa.
     fn rotate_input_mode(&mut self) {
         let mut selected_idx = INPUT_MODES
             .iter()
@@ -738,6 +756,16 @@ impl App {
         self.input_mode = INPUT_MODES[selected_idx];
     }
 
+/// Enters the interactive mode, which establishes a connection to the serial port
+/// with the current configuration settings. The function configures the serial port
+/// settings, such as baud rate, stop bits, parity, and character size, and opens the port.
+/// It sets read and write timeouts and starts the communication by sending a Start command
+/// with the established serial context.
+///
+/// # Panics
+///
+/// This function will panic if there is a failure in opening the serial port or setting
+/// the read/write timeouts.
     fn enter_interactive_mode(&mut self) {
         self.mode = Mode::Interactive;
 
@@ -789,21 +817,45 @@ impl App {
         self.send_command(SerialCommand::Start(ctx));
     }
 
-    fn enter_settings(&mut self) {
+    /// Exits the current mode and enters the settings mode, which is a mode where the user can adjust
+    /// the port, baud rate, stop bits, parity, and data bits of the serial connection.
+    fn enter_settings_mode(&mut self) {
         self.send_command(SerialCommand::Stop);
         self.mode = Mode::Settings;
     }
 
+    /// Enters the analyzer mode, which is a special interactive mode that renders the hexadecimal,
+    /// signed and unsigned 8, 16, 32, and 64 bit, as well as floating point 32 and 64 bit values of the byte
+    /// at the cursor position.
     fn enter_analyzer_mode(&mut self) {
         self.send_command(SerialCommand::Stop);
         self.mode = Mode::Analyzer;
     }
 
+    /// Converts two hexadecimal bytes into a single `char`.
+    ///
+    /// # Arguments
+    ///
+    /// * `b0` - The high-order 4 bits represented as a `u8`.
+    /// * `b1` - The low-order 4 bits represented as a `u8`.
+    ///
+    /// # Returns
+    ///
+    /// A `char` representation of the combined byte formed by shifting `b0` left by 4 bits
+    /// and adding `b1`.
+    ///
+    /// # Panics
+    ///
+    /// This function will panic if the resulting byte does not correspond to a valid
+    /// Unicode code point.
     fn two_hex_bytes_to_char(&self, b0: u8, b1: u8) -> char {
         let byte = (b0 << 4) + b1;
         char::from_u32(byte as u32).unwrap()
     }
 
+    /// Sends the contents of the `send_buffer` to the serial port.
+    /// The contents of `send_buffer` are processed according to the current
+    /// `input_mode` and `crlf` settings before being sent.
     fn send_tx_buffer(&mut self) {
         self.apply_input_mode();
         self.apply_crlf_setting();
@@ -929,24 +981,38 @@ impl App {
         });
     }
 
+/// Sends a serial command to the background thread via the command sender channel.
+/// 
+/// # Arguments
+///
+/// * `cmd` - A `SerialCommand` variant to be sent to the background thread. This could
+///   be a command to start, stop, or send data through the serial port.
     fn send_command(&self, cmd: SerialCommand) {
         if let Some(p) = &self.command_sender {
             p.send(cmd).unwrap();
         }
     }
 
+    /// Scroll up in the display history, moving the top line down by one.
     fn scroll_up(&mut self) {
         self.scroll_offset = self.scroll_offset.saturating_add(1);
     }
 
+    /// Scroll down in the display history, moving the top line up by one.
     fn scroll_down(&mut self) {
         self.scroll_offset = self.scroll_offset.saturating_sub(1);
     }
 
+    /// Move the analyzer cursor one character to the left. This will move the highlighted
+    /// character in the analyzer window to the left by one position. If the cursor is
+    /// already at the left edge of the window, this function has no effect.
     fn cursor_left(&mut self) {
         self.analyzer_cursor_pos = self.analyzer_cursor_pos.saturating_sub(1);
     }
 
+    /// Move the analyzer cursor one character to the right. This will move the highlighted
+    /// character in the analyzer window to the right by one position. If the cursor is
+    /// already at the right edge of the window, this function has no effect.
     fn cursor_right(&mut self) {
         self.analyzer_cursor_pos += 1;
     }
