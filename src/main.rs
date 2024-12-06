@@ -12,7 +12,7 @@ use ratatui::{
     style::{Style, Stylize},
     symbols::border,
     text::Line,
-    widgets::{Block, Clear, List, ListDirection, Paragraph},
+    widgets::{block::title, Block, Clear, List, ListDirection, Paragraph},
     DefaultTerminal, Frame,
 };
 use serial2::Settings;
@@ -52,6 +52,15 @@ pub enum Mode {
     Settings,
     Interactive,
     Analyzer,
+}
+
+const ENDIANESSES: [Endianness; 2] = [Endianness::Little, Endianness::Big];
+
+#[derive(Debug, Default, PartialEq)]
+pub enum Endianness {
+    Big,
+    #[default]
+    Little,
 }
 
 #[derive(Debug, Default, PartialEq)]
@@ -111,6 +120,15 @@ enum SerialStateMessage {
     ErrorEvent(String),
     Started,
     Stopped,
+}
+
+impl Display for Endianness {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Endianness::Big => write!(f, "Big"),
+            Endianness::Little => write!(f, "Little"),
+        }
+    }
 }
 
 impl Display for CRLFSetting {
@@ -201,6 +219,7 @@ pub struct App {
     scroll_offset: u32,
     analyzer_cursor_pos: usize,
     input_mode: InputMode,
+    analyzer_endianness: Endianness,
 }
 
 impl Default for App {
@@ -222,6 +241,7 @@ impl Default for App {
             scroll_offset: 0,
             analyzer_cursor_pos: 0,
             input_mode: InputMode::Default,
+            analyzer_endianness: Endianness::Little,
         };
 
         data
@@ -312,6 +332,7 @@ impl App {
             KeyCode::Up => self.scroll_up(),
             KeyCode::Down => self.scroll_down(),
             KeyCode::F(2) => self.rotate_display_mode(),
+            KeyCode::Char('e') => self.rotate_analyzer_endianness(),
             _ => {}
         }
     }
@@ -535,7 +556,9 @@ impl App {
                         let mut pre_cursor = String::from(bytes.clone());
                         let mut cursor = String::from("");
                         let mut post_cursor = String::from("");
+                        let mut highlight_string = String::from("");
                         let mut cursor_color = ratatui::style::Color::Black;
+                        let mut post_cursor_color = ratatui::style::Color::Black;
 
                         if self.display_mode == DisplayMode::Hex
                             && line_index == 0
@@ -546,9 +569,17 @@ impl App {
                             if pos <= bytes.len() - 3 {
                                 pre_cursor = String::from(&bytes[0..pos]);
                                 cursor = String::from(&bytes[pos..pos + 2]);
-                                post_cursor = String::from(&bytes[pos + 2..]);
+                                let highlight_len = if (bytes.len() - pos - 2) > 24 {
+                                    24
+                                } else {
+                                    bytes.len() - pos - 2
+                                };
+                                highlight_string =
+                                    String::from(&bytes[pos + 2..pos + 2 + highlight_len]);
+                                post_cursor = String::from(&bytes[pos + 2 + highlight_len..]);
                             }
                             cursor_color = ratatui::style::Color::Blue;
+                            post_cursor_color = ratatui::style::Color::DarkGray;
                             *analyzer_data = x.data.to_vec();
                         }
 
@@ -563,6 +594,9 @@ impl App {
                             format!("{}", cursor)
                                 .fg(ratatui::style::Color::Gray)
                                 .bg(cursor_color),
+                            format!("{}", highlight_string)
+                                .fg(ratatui::style::Color::Gray)
+                                .bg(post_cursor_color),
                             format!("{}", post_cursor).fg(ratatui::style::Color::Gray),
                         ]);
                         line_index += 1;
@@ -616,8 +650,15 @@ impl App {
         if (self.analyzer_cursor_pos as i32) <= (analyzer_data.len() as i32 - 2) {
             let two_bytes =
                 analyzer_data[self.analyzer_cursor_pos..=self.analyzer_cursor_pos + 1].to_vec();
-            let two_as_u16 = u16::from_le_bytes(two_bytes.clone().try_into().unwrap());
-            let two_as_i16 = i16::from_le_bytes(two_bytes.clone().try_into().unwrap());
+            let two_as_u16: u16;
+            let two_as_i16: i16;
+            if self.analyzer_endianness == Endianness::Big {
+                two_as_u16 = u16::from_be_bytes(two_bytes.clone().try_into().unwrap());
+                two_as_i16 = i16::from_be_bytes(two_bytes.clone().try_into().unwrap());
+            } else {
+                two_as_u16 = u16::from_le_bytes(two_bytes.clone().try_into().unwrap());
+                two_as_i16 = i16::from_le_bytes(two_bytes.clone().try_into().unwrap());
+            }
             items.push(format!("u16: {}", two_as_u16));
             items.push(format!("i16: {}", two_as_i16));
         }
@@ -625,9 +666,20 @@ impl App {
         if (self.analyzer_cursor_pos as i32) <= (analyzer_data.len() as i32 - 4) {
             let four_bytes =
                 analyzer_data[self.analyzer_cursor_pos..=self.analyzer_cursor_pos + 3].to_vec();
-            let four_as_u32 = u32::from_le_bytes(four_bytes.clone().try_into().unwrap());
-            let four_as_i32 = i32::from_le_bytes(four_bytes.clone().try_into().unwrap());
-            let four_as_f32 = f32::from_le_bytes(four_bytes.clone().try_into().unwrap());
+            let four_as_u32: u32;
+            let four_as_i32: i32;
+            let four_as_f32: f32;
+
+            if self.analyzer_endianness == Endianness::Big {
+                four_as_u32 = u32::from_be_bytes(four_bytes.clone().try_into().unwrap());
+                four_as_i32 = i32::from_be_bytes(four_bytes.clone().try_into().unwrap());
+                four_as_f32 = f32::from_be_bytes(four_bytes.clone().try_into().unwrap());
+            } else {
+                four_as_u32 = u32::from_le_bytes(four_bytes.clone().try_into().unwrap());
+                four_as_i32 = i32::from_le_bytes(four_bytes.clone().try_into().unwrap());
+                four_as_f32 = f32::from_le_bytes(four_bytes.clone().try_into().unwrap());
+            }
+
             items.push(format!("u32: {}", four_as_u32));
             items.push(format!("i32: {}", four_as_i32));
             items.push(format!("f32: {}", four_as_f32));
@@ -644,8 +696,15 @@ impl App {
             items.push(format!("f64: {}", eight_as_f64));
         }
 
+        let headline = Line::from(vec![
+            "Analyzer,".fg(ratatui::style::Color::Gray),
+            format!(" {} ", self.analyzer_endianness).fg(ratatui::style::Color::Gray),
+            "e".fg(ratatui::style::Color::Red),
+            "ndian".fg(ratatui::style::Color::Gray),
+        ]);
+
         let list = List::new(items)
-            .block(Block::bordered().title("Analyzer"))
+            .block(Block::bordered().title(headline))
             .style(Style::new().fg(ratatui::style::Color::Gray))
             .highlight_style(Style::new().fg(ratatui::style::Color::Red))
             .highlight_symbol(">>")
@@ -1070,5 +1129,13 @@ impl App {
     /// already at the right edge of the window, this function has no effect.
     fn cursor_right(&mut self) {
         self.analyzer_cursor_pos += 1;
+    }
+
+    fn rotate_analyzer_endianness(&mut self) {
+        if self.analyzer_endianness == Endianness::Big {
+            self.analyzer_endianness = Endianness::Little
+        } else {
+            self.analyzer_endianness = Endianness::Big
+        }
     }
 }
