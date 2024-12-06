@@ -12,7 +12,7 @@ use ratatui::{
     style::{Style, Stylize},
     symbols::border,
     text::Line,
-    widgets::{block::title, Block, Clear, List, ListDirection, Paragraph},
+    widgets::{Block, Clear, List, ListDirection, Paragraph},
     DefaultTerminal, Frame,
 };
 use serial2::Settings;
@@ -53,8 +53,6 @@ pub enum Mode {
     Interactive,
     Analyzer,
 }
-
-const ENDIANESSES: [Endianness; 2] = [Endianness::Little, Endianness::Big];
 
 #[derive(Debug, Default, PartialEq)]
 pub enum Endianness {
@@ -321,6 +319,7 @@ impl App {
             }
             KeyCode::Enter => self.send_tx_buffer(),
             KeyCode::F(3) => self.rotate_input_mode(),
+            KeyCode::F(2) => self.rotate_display_mode(),
             _ => {}
         }
     }
@@ -419,6 +418,12 @@ impl App {
         buf.render_widget(opts.block(block), area);
     }
 
+    /// Convert a control character to a string representation.
+    ///
+    /// This function takes a byte containing a control character and returns a string
+    /// representation of that character. The string representation is of the form `<X>`,
+    /// where `X` is the name of the control character. For example, a byte with the value 0x00
+    /// would return the string `"<NUL>"`.
     fn control_char_to_string(c: u8) -> String {
         let chr = match c {
             0x00 => "NUL",
@@ -778,16 +783,43 @@ impl App {
                 .to_str()
                 .unwrap()
                 .to_string();
-            for port in ports {
+
+            // find index of selected port:
+            let mut idx = 0;
+            for (i, port) in ports.iter().enumerate() {
                 if port.file_name().unwrap().to_str().unwrap() != self.port {
                     continue;
                 }
-                self.port = port.file_name().unwrap().to_str().unwrap().to_string();
                 port_found = true;
+                idx = i;
+                break;
             }
-            if !port_found {
+
+            if port_found {
+                idx += 1;
+                idx %= ports.len();
+                self.port = ports[idx]
+                    .file_name()
+                    .unwrap()
+                    .to_str()
+                    .unwrap()
+                    .to_string();    
+            }
+            else {
                 self.port = first_port_name.to_string();
             }
+            
+
+            // for port in ports {
+            //     if port.file_name().unwrap().to_str().unwrap() != self.port {
+            //         continue;
+            //     }
+            //     self.port = port.file_name().unwrap().to_str().unwrap().to_string();
+            //     port_found = true;
+            // }
+            // if !port_found {
+            //     self.port = first_port_name.to_string();
+            // }
         }
     }
 
