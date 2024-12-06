@@ -196,7 +196,14 @@ fn main() -> io::Result<()> {
 
 #[derive(Debug)]
 struct SerialContext {
+    port_name: String,
     com_port: Option<serial2::SerialPort>,
+}
+
+impl PartialEq for SerialContext {
+    fn eq(&self, other: &Self) -> bool {
+        self.port_name == other.port_name
+    }
 }
 
 #[derive(Debug)]
@@ -266,13 +273,15 @@ impl App {
         while !self.exit {
             terminal.draw(|frame| self.draw(frame))?;
             self.handle_events()?;
+            // limit framerate
+            thread::sleep(Duration::from_millis(25));
         }
         Ok(())
     }
 
     /// updates the application's state based on user input
     fn handle_events(&mut self) -> io::Result<()> {
-        let evt = event::poll(Duration::from_millis(100))?;
+        let evt = event::poll(Duration::from_millis(5))?;
         if evt {
             match event::read()? {
                 // it's important to check that the event is a key press event as
@@ -288,7 +297,6 @@ impl App {
 
     fn do_settings_mode(&mut self, key_event: KeyEvent) {
         match key_event.code {
-            // KeyCode::Char('q') => self.exit(),
             KeyCode::Char('p') => self.rotate_port(),
             KeyCode::Char('b') => self.rotate_baudrate(),
             KeyCode::Char('s') => self.rotate_stopbits(),
@@ -807,19 +815,7 @@ impl App {
             }
             else {
                 self.port = first_port_name.to_string();
-            }
-            
-
-            // for port in ports {
-            //     if port.file_name().unwrap().to_str().unwrap() != self.port {
-            //         continue;
-            //     }
-            //     self.port = port.file_name().unwrap().to_str().unwrap().to_string();
-            //     port_found = true;
-            // }
-            // if !port_found {
-            //     self.port = first_port_name.to_string();
-            // }
+            }            
         }
     }
 
@@ -953,7 +949,9 @@ impl App {
             .expect("Failed to set read timeout.");
         p.set_write_timeout(Duration::from_millis(2500))
             .expect("Failed to set write timeout.");
-        let ctx = SerialContext { com_port: Some(p) };
+        p.flush().expect("Failed to flush port.");
+        let _= p.discard_buffers();
+        let ctx = SerialContext { com_port: Some(p), port_name: self.port.clone() };
 
         self.send_command(SerialCommand::Start(ctx));
     }
@@ -1047,6 +1045,32 @@ impl App {
         }
     }
 
+    /// Returns the next command from the main thread, or `None` if there are no commands
+    /// to process.
+    ///
+    /// # Behavior
+    ///
+    /// If the serial port is stopped, this function will block until a command is received.
+    /// If the serial port is running, this function will non-blockingly return the next command
+    /// if there is one, or `None` if there are no commands to process.
+    fn receive_command(state: &PortThreadState, rx: &Receiver<SerialCommand>) -> Option<SerialCommand>
+    {
+        if *state == PortThreadState::Stopped {
+            if let Ok(rxd) = rx.recv()
+            {
+                return Some(rxd)
+            }
+            return  None
+        }else
+        {
+            if let Ok(rxd )= rx.try_recv()
+            {
+                return  Some(rxd)
+            }
+            return  None
+        };
+    }
+
     /// Starts a background thread that is responsible for managing the serial port.
     /// This thread will receive commands from the main thread and act accordingly.
     /// The main thread should send commands on the `rx` channel and the background
@@ -1070,7 +1094,12 @@ impl App {
             let mut state = PortThreadState::Stopped;
             loop {
                 let mut data_to_send: Vec<u8> = vec![];
-                if let Ok(cmd) = rx.try_recv() {
+
+                // if the state is stopped, wait until rx receives something:
+                let _cmd = Self::receive_command(&state, &rx);
+                
+
+                if let Some(cmd) = _cmd{
                     match cmd {
                         SerialCommand::Send(data) => {
                             data_to_send = data;
@@ -1088,39 +1117,39 @@ impl App {
                             }
                         }
                     }
+                }
 
-                    match state {
-                        PortThreadState::Stopped => {}
-                        PortThreadState::Running(ref ctx) => {
-                            if let Some(p) = &ctx.com_port {
-                                if data_to_send.len() != 0 {
-                                    if let Ok(_) = p.write(&data_to_send) {
-                                        let entry = HistoryEntry {
-                                            rx_tx: RxTx::Tx,
-                                            data: data_to_send.clone(),
-                                        };
-                                        tx.send(SerialStateMessage::DataEvent(entry)).unwrap();
-                                    } else {
-                                        tx.send(SerialStateMessage::ErrorEvent(
-                                            "Failed to write to port".to_string(),
-                                        ))
-                                        .unwrap();
-                                    }
-                                }
-                                // receive data:
-                                let mut buffer: [u8; 256] = [0u8; 256];
-                                if let Ok(data) = p.read(&mut buffer) {
-                                    let received_bytes = buffer[0..data].to_vec();
-
+                match state {
+                    PortThreadState::Stopped => {}
+                    PortThreadState::Running(ref ctx) => {
+                        if let Some(p) = &ctx.com_port {
+                            if data_to_send.len() != 0 {
+                                if let Ok(_) = p.write(&data_to_send) {
                                     let entry = HistoryEntry {
-                                        rx_tx: RxTx::Rx,
-                                        data: received_bytes,
+                                        rx_tx: RxTx::Tx,
+                                        data: data_to_send.clone(),
                                     };
                                     tx.send(SerialStateMessage::DataEvent(entry)).unwrap();
-                                    data_to_send.clear();
+                                } else {
+                                    tx.send(SerialStateMessage::ErrorEvent(
+                                        "Failed to write to port".to_string(),
+                                    ))
+                                    .unwrap();
                                 }
                             }
-                        }
+                            // receive data:
+                            let mut buffer: [u8; 256] = [0u8; 256];
+                            if let Ok(data) = p.read(&mut buffer) {
+                                let received_bytes = buffer[0..data].to_vec();
+
+                                let entry = HistoryEntry {
+                                    rx_tx: RxTx::Rx,
+                                    data: received_bytes,
+                                };
+                                tx.send(SerialStateMessage::DataEvent(entry)).unwrap();
+                                data_to_send.clear();
+                            }
+                        }                        
                     }
                 }
             }
