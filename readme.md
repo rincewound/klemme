@@ -44,7 +44,6 @@ Normal --> Analyzer
 
 ### Settings mode
 
-* q - Exit application
 * p - select port
 * b - select baud rate
 * s - select stop bits
@@ -65,6 +64,7 @@ Normal --> Analyzer
 * F2 - Change display mode
 * Up/Down - Scroll Receive buffer
 * Left/Right - Move analyzer cursor
+* e - switch endianness
 
 ## Display modes
 
