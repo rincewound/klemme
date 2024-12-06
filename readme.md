@@ -6,14 +6,34 @@ for developers. klemme is a mode based application, i.e. at any given time it ca
 * Interactive, opens the port outputs received data and allows the user to send data through the port
 * Analyzer, allows the user to analyze received data (e.g. look at bit representations of indiviual bytes)
 
+## Features
+* Supports common baud rates & port settings
+* Wide range of display modes that can be applied retro actively
+
+# Modes
+```mermaid
+flowchart
+Normal --> Settings
+Settings --> Normal
+Normal --> Interactive
+Interactive --> Normal
+Interactive --> Analyzer
+Analyzer --> Normal
+Analyzer --> Interactive
+Settings --> Interactive
+```
+
+
 # Keys
 ## General
-F2 - Change display mode
-F3 - Change input mode
-F5 - Switch to settings mode
-F6 - Switch to interactive mode, using the current settings
-F7 - Switch to analyzer mode.
+esc - Change to normal mode
 F10 - Clear history
+
+## Normal Mode
+a - enter analyzer mode
+s - enter settings mode
+i - enter interactive mode
+esc - exit
 
 ## Settings mode
 q - Exit application
@@ -29,8 +49,10 @@ c - select CRLF settings
 Up - Scroll Receive Buffer Up
 Down - Scroll Receive Buffer Down
 Enter - Send current send buffer (according to CRLF and Input settings)
+F3 - Change input mode
 
 ## Analyzer
+F2 - Change display mode
 Up/Down - Scroll Receive buffer
 Left/Right - Move analyzer cursor
 

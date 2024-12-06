@@ -48,6 +48,7 @@ const INPUT_MODES: [InputMode; 2] = [InputMode::Default, InputMode::Hex];
 #[derive(Debug, Default, PartialEq)]
 pub enum Mode {
     #[default]
+    Normal,
     Settings,
     Interactive,
     Analyzer,
@@ -149,6 +150,18 @@ impl Display for RxTx {
         match self {
             RxTx::Rx => write!(f, "RX"),
             RxTx::Tx => write!(f, "TX"),
+        }
+    }
+}
+
+impl Display for Mode
+{
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Mode::Normal => write!(f, "Normal"),
+            Mode::Settings => write!(f, "Settings"),
+            Mode::Interactive => write!(f, "Interactive"),
+            Mode::Analyzer => write!(f, "Analyzer"),
         }
     }
 }
@@ -255,7 +268,7 @@ impl App {
 
     fn do_settings_mode(&mut self, key_event: KeyEvent) {
         match key_event.code {
-            KeyCode::Char('q') => self.exit(),
+            // KeyCode::Char('q') => self.exit(),
             KeyCode::Char('p') => self.rotate_port(),
             KeyCode::Char('b') => self.rotate_baudrate(),
             KeyCode::Char('s') => self.rotate_stopbits(),
@@ -285,6 +298,7 @@ impl App {
                 self.send_buffer.pop();
             }
             KeyCode::Enter => self.send_tx_buffer(),
+            KeyCode::F(3) => self.rotate_input_mode(),
             _ => {}
         }
     }
@@ -295,26 +309,38 @@ impl App {
             KeyCode::Right => self.cursor_right(),
             KeyCode::Up => self.scroll_up(),
             KeyCode::Down => self.scroll_down(),
+            KeyCode::F(2) => self.rotate_display_mode(),
             _ => {}
         }
     }
 
-    fn handle_key_event(&mut self, key_event: KeyEvent) {
-        if key_event.code == KeyCode::F(2) {
-            self.rotate_display_mode();
-        }      
-        if key_event.code == KeyCode::F(3) {
-            self.rotate_input_mode();
+    fn do_normal_mode(&mut self, key_event: KeyEvent) {
+        if key_event.code == KeyCode::Esc {
+            self.exit();
         }
-        if key_event.code == KeyCode::F(5) {
+        if key_event.code == KeyCode::Char('s') {
             self.enter_settings_mode();
         }
-        if key_event.code == KeyCode::F(6) {
+        if key_event.code == KeyCode::Char('i')  {
             self.enter_interactive_mode();
         }
-        if key_event.code == KeyCode::F(7) {
+        if key_event.code == KeyCode::Char('a')  {
             self.enter_analyzer_mode();
         }
+    }
+
+    fn handle_key_event(&mut self, key_event: KeyEvent) {
+        if key_event.code == KeyCode::Esc && self.mode != Mode::Normal {
+            self.enter_normal_mode();
+            return;
+        }
+        // if key_event.code == KeyCode::F(2) {
+        //     self.rotate_display_mode();
+        // }      
+        // if key_event.code == KeyCode::F(3) {
+        //     self.rotate_input_mode();
+        // }
+
         if key_event.code == KeyCode::F(10) {
             self.display_history.clear();
         }   
@@ -326,6 +352,7 @@ impl App {
             }
             Mode::Interactive => self.do_interactive_mode(key_event),
             Mode::Analyzer => self.do_analyzer_mode(key_event),
+            Mode::Normal => self.do_normal_mode(key_event)
         }
     }
 
@@ -457,20 +484,25 @@ impl App {
     }
 
     fn popup_area(area: Rect, percent_x: u16, percent_y: u16) -> Rect {
-        let vertical = Layout::vertical([Constraint::Percentage(percent_y)]).flex(Flex::Center);
-        let horizontal = Layout::horizontal([Constraint::Percentage(percent_x)]).flex(Flex::Center);
+        let vertical = Layout::vertical([Constraint::Percentage(percent_y)]).flex(Flex::Start);
+        let horizontal = Layout::horizontal([Constraint::Percentage(percent_x)]).flex(Flex::End);
         let [area] = vertical.areas(area);
         let [area] = horizontal.areas(area);
         area
     }
 
     fn draw_rxtxbuffer(&mut self, area: Rect, buf: &mut Frame) {
+        let highlight_color = if self.mode == Mode::Analyzer {
+            ratatui::style::Color::Red
+        } else {
+            ratatui::style::Color::Gray
+        };
         self.update_history_with_incoming_data();
         let mut analyzer_data: Vec<u8> = Vec::new();
         let items = self.build_list_items(&mut analyzer_data);
         let list = List::new(items)
             .block(Block::bordered().title("History"))
-            .style(Style::new().fg(ratatui::style::Color::Gray))
+            .style(Style::new().fg(highlight_color))
             .highlight_style(Style::new().fg(ratatui::style::Color::Red))
             .highlight_symbol(">>")
             .repeat_highlight_symbol(true)
@@ -832,6 +864,11 @@ impl App {
         self.mode = Mode::Analyzer;
     }
 
+    fn enter_normal_mode(&mut self) {
+        self.send_command(SerialCommand::Stop);
+        self.mode = Mode::Normal;
+    }
+
     /// Converts two hexadecimal bytes into a single `char`.
     ///
     /// # Arguments
@@ -1016,4 +1053,5 @@ impl App {
     fn cursor_right(&mut self) {
         self.analyzer_cursor_pos += 1;
     }
+    
 }
