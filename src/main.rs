@@ -154,8 +154,7 @@ impl Display for RxTx {
     }
 }
 
-impl Display for Mode
-{
+impl Display for Mode {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Mode::Normal => write!(f, "Normal"),
@@ -255,14 +254,17 @@ impl App {
 
     /// updates the application's state based on user input
     fn handle_events(&mut self) -> io::Result<()> {
-        match event::read()? {
-            // it's important to check that the event is a key press event as
-            // crossterm also emits key release and repeat events on Windows.
-            Event::Key(key_event) if key_event.kind == KeyEventKind::Press => {
-                self.handle_key_event(key_event)
-            }
-            _ => {}
-        };
+        let evt = event::poll(Duration::from_millis(100))?;
+        if evt {
+            match event::read()? {
+                // it's important to check that the event is a key press event as
+                // crossterm also emits key release and repeat events on Windows.
+                Event::Key(key_event) if key_event.kind == KeyEventKind::Press => {
+                    self.handle_key_event(key_event)
+                }
+                _ => {}
+            };
+        }
         Ok(())
     }
 
@@ -284,7 +286,7 @@ impl App {
     fn do_interactive_mode(&mut self, key_event: KeyEvent) {
         match key_event.code {
             KeyCode::Up => self.scroll_up(),
-            KeyCode::Down => self.scroll_down(),            
+            KeyCode::Down => self.scroll_down(),
             KeyCode::Char(x) => {
                 if self.input_mode == InputMode::Hex {
                     if x.is_ascii_hexdigit() || x == ' ' {
@@ -304,7 +306,7 @@ impl App {
     }
 
     fn do_analyzer_mode(&mut self, key_event: KeyEvent) {
-        match key_event.code {            
+        match key_event.code {
             KeyCode::Left => self.cursor_left(),
             KeyCode::Right => self.cursor_right(),
             KeyCode::Up => self.scroll_up(),
@@ -321,10 +323,10 @@ impl App {
         if key_event.code == KeyCode::Char('s') {
             self.enter_settings_mode();
         }
-        if key_event.code == KeyCode::Char('i')  {
+        if key_event.code == KeyCode::Char('i') {
             self.enter_interactive_mode();
         }
-        if key_event.code == KeyCode::Char('a')  {
+        if key_event.code == KeyCode::Char('a') {
             self.enter_analyzer_mode();
         }
     }
@@ -336,14 +338,14 @@ impl App {
         }
         // if key_event.code == KeyCode::F(2) {
         //     self.rotate_display_mode();
-        // }      
+        // }
         // if key_event.code == KeyCode::F(3) {
         //     self.rotate_input_mode();
         // }
 
         if key_event.code == KeyCode::F(10) {
             self.display_history.clear();
-        }   
+        }
 
         match self.mode {
             Mode::Settings => {
@@ -352,7 +354,7 @@ impl App {
             }
             Mode::Interactive => self.do_interactive_mode(key_event),
             Mode::Analyzer => self.do_analyzer_mode(key_event),
-            Mode::Normal => self.do_normal_mode(key_event)
+            Mode::Normal => self.do_normal_mode(key_event),
         }
     }
 
@@ -499,7 +501,8 @@ impl App {
         };
         self.update_history_with_incoming_data();
         let mut analyzer_data: Vec<u8> = Vec::new();
-        let items = self.build_list_items(&mut analyzer_data);
+        let num_rows = area.height as usize;
+        let items = self.build_list_items(&mut analyzer_data, num_rows);
         let list = List::new(items)
             .block(Block::bordered().title("History"))
             .style(Style::new().fg(highlight_color))
@@ -512,14 +515,18 @@ impl App {
         self.render_analyzer(area, buf, analyzer_data);
     }
 
-    fn build_list_items(&mut self, analyzer_data: &mut Vec<u8>) -> Vec<Line<'_>> {
+    fn build_list_items(
+        &mut self,
+        analyzer_data: &mut Vec<u8>,
+        max_num_rows: usize,
+    ) -> Vec<Line<'_>> {
         let mut line_index = 0;
         let items: Vec<Line> = self
             .display_history
             .iter()
             .rev()
             .skip(self.scroll_offset as usize)
-            .take(10)
+            .take(max_num_rows)
             .map(|x| {
                 let result = match x {
                     SerialStateMessage::DataEvent(x) => {
@@ -562,8 +569,12 @@ impl App {
                         ln
                     }
                     SerialStateMessage::ErrorEvent(x) => Line::raw(x),
-                    SerialStateMessage::Started => Line::raw("--- Started ---"),
-                    SerialStateMessage::Stopped => Line::raw("--- Stopped ---"),
+                    SerialStateMessage::Started => {
+                        Line::from(vec!["--- Started ---".fg(ratatui::style::Color::Green)])
+                    }
+                    SerialStateMessage::Stopped => {
+                        Line::from(vec!["--- Stopped ---".fg(ratatui::style::Color::LightRed)])
+                    }
                 };
                 return result;
             })
@@ -765,6 +776,13 @@ impl App {
         self.display_mode = DISPLAY_MODES[selected_idx];
     }
 
+    /// Rotates the CRLF setting.
+    ///
+    /// The following settings are available:
+    /// None: No data is appended
+    /// CR: A CR character is appended after each user input
+    /// LF: An LF character is appended after each user input
+    /// CRLF: A CR and an LF character are appended after each user input
     fn rotate_crlf_setting(&mut self) {
         let mut selected_idx = CRLF_SETTINGS
             .iter()
@@ -788,16 +806,16 @@ impl App {
         self.input_mode = INPUT_MODES[selected_idx];
     }
 
-/// Enters the interactive mode, which establishes a connection to the serial port
-/// with the current configuration settings. The function configures the serial port
-/// settings, such as baud rate, stop bits, parity, and character size, and opens the port.
-/// It sets read and write timeouts and starts the communication by sending a Start command
-/// with the established serial context.
-///
-/// # Panics
-///
-/// This function will panic if there is a failure in opening the serial port or setting
-/// the read/write timeouts.
+    /// Enters the interactive mode, which establishes a connection to the serial port
+    /// with the current configuration settings. The function configures the serial port
+    /// settings, such as baud rate, stop bits, parity, and character size, and opens the port.
+    /// It sets read and write timeouts and starts the communication by sending a Start command
+    /// with the established serial context.
+    ///
+    /// # Panics
+    ///
+    /// This function will panic if there is a failure in opening the serial port or setting
+    /// the read/write timeouts.
     fn enter_interactive_mode(&mut self) {
         self.mode = Mode::Interactive;
 
@@ -1018,12 +1036,12 @@ impl App {
         });
     }
 
-/// Sends a serial command to the background thread via the command sender channel.
-/// 
-/// # Arguments
-///
-/// * `cmd` - A `SerialCommand` variant to be sent to the background thread. This could
-///   be a command to start, stop, or send data through the serial port.
+    /// Sends a serial command to the background thread via the command sender channel.
+    ///
+    /// # Arguments
+    ///
+    /// * `cmd` - A `SerialCommand` variant to be sent to the background thread. This could
+    ///   be a command to start, stop, or send data through the serial port.
     fn send_command(&self, cmd: SerialCommand) {
         if let Some(p) = &self.command_sender {
             p.send(cmd).unwrap();
@@ -1053,5 +1071,4 @@ impl App {
     fn cursor_right(&mut self) {
         self.analyzer_cursor_pos += 1;
     }
-    
 }
