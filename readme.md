@@ -1,9 +1,10 @@
 # Klemme
 
 `klemme` (pronounce `clammy`, German for "Terminal") is a serial terminal application designed
-for developers. klemme is a mode based application, i.e. at any given time it can be in any of the following three modes:
+for developers. klemme is a mode based application, i.e. at any given time it can be in any of the following modes:
 
-* Settings, allows the use to setup the used port and port Settings
+* Normal, this mode allows to exit the app and to switch to the other modes.
+* Settings, allows the use to setup the used port and port settings
 * Interactive, opens the port outputs received data and allows the user to send data through the port
 * Analyzer, allows the user to analyze received data (e.g. look at bit representations of indiviual bytes)
 
@@ -24,45 +25,46 @@ Interactive --> Analyzer
 Analyzer --> Normal
 Analyzer --> Interactive
 Settings --> Interactive
+Normal --> Analyzer
 ```
 
 ## Keys
 
 ### General
 
-esc - Change to normal mode
-F10 - Clear history
+* esc - Change to normal mode
+* F10 - Clear history
 
 ### Normal Mode
 
-a - enter analyzer mode
-s - enter settings mode
-i - enter interactive mode
-esc - exit
+* a - enter analyzer mode
+* s - enter settings mode
+* i - enter interactive mode
+* esc - exit
 
 ### Settings mode
 
-q - Exit application
-p - select port
-b - select baud rate
-s - select stop bits
-a - select parity
-d - select databits
-m - select display mode
-c - select CRLF settings
+* q - Exit application
+* p - select port
+* b - select baud rate
+* s - select stop bits
+* a - select parity
+* d - select databits
+* m - select display mode
+* c - select CRLF settings
 
 ### Interactive
 
-Up - Scroll Receive Buffer Up
-Down - Scroll Receive Buffer Down
-Enter - Send current send buffer (according to CRLF and Input settings)
-F3 - Change input mode
+* Up - Scroll Receive Buffer Up
+* Down - Scroll Receive Buffer Down
+* Enter - Send current send buffer (according to CRLF and Input settings)
+* F3 - Change input mode
 
 ### Analyzer
 
-F2 - Change display mode
-Up/Down - Scroll Receive buffer
-Left/Right - Move analyzer cursor
+* F2 - Change display mode
+* Up/Down - Scroll Receive buffer
+* Left/Right - Move analyzer cursor
 
 ## Display modes
 
