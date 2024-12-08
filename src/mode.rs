@@ -3,7 +3,6 @@ use std::fmt::Display;
 use crossterm::event::KeyEvent;
 use ratatui::{layout::Rect, Frame};
 
-
 #[derive(Debug, Default, PartialEq)]
 pub enum Mode {
     #[default]
@@ -24,7 +23,7 @@ impl Display for Mode {
     }
 }
 
-pub trait ApplicationMode {    
+pub trait ApplicationMode {
     fn handle_key_event(&mut self, key_event: KeyEvent);
     fn set_active_inactive(&mut self, active: bool);
     fn render(&self, area: Rect, buf: &mut Frame);

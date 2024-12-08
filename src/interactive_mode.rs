@@ -1,25 +1,31 @@
 use std::sync::mpsc::Sender;
 
 use crossterm::event::KeyCode;
-use ratatui::{style::{Style, Stylize}, symbols::border, text::Line, widgets::{Block, Paragraph}};
+use ratatui::{
+    style::{Style, Stylize},
+    symbols::border,
+    text::Line,
+    widgets::{Block, Paragraph},
+};
 
-use crate::{mode::ApplicationMode, portthread::SerialCommand, CRLFSetting, InputMode, INPUT_MODES};
-
+use crate::{
+    mode::ApplicationMode, portthread::SerialCommand, CRLFSetting, InputMode, CRLF_SETTINGS,
+    INPUT_MODES,
+};
 
 #[derive(Debug)]
-pub struct InteractiveMode
-{
+pub struct InteractiveMode {
     active: bool,
     send_buffer: Vec<u8>,
     input_mode: InputMode,
     command_sender: Sender<SerialCommand>,
-    crlf_setting: CRLFSetting
+    crlf: CRLFSetting,
 }
 
-impl ApplicationMode for InteractiveMode
-{
-    fn handle_key_event(&mut self, key_event: crossterm::event::KeyEvent) {        
+impl ApplicationMode for InteractiveMode {
+    fn handle_key_event(&mut self, key_event: crossterm::event::KeyEvent) {
         match key_event.code {
+            KeyCode::F(4) => self.rotate_crlf_setting(),
             KeyCode::Char(x) => {
                 if self.input_mode == InputMode::Hex {
                     if x.is_ascii_hexdigit() || x == ' ' {
@@ -32,7 +38,7 @@ impl ApplicationMode for InteractiveMode
             KeyCode::Backspace => {
                 self.send_buffer.pop();
             }
-            KeyCode::Enter => self.send_tx_buffer(),            
+            KeyCode::Enter => self.send_tx_buffer(),
             _ => {}
         }
     }
@@ -48,15 +54,23 @@ impl ApplicationMode for InteractiveMode
             ratatui::style::Color::Gray
         };
 
-        let top = "TX Line";
+        let header = Line::from(vec![
+            "TX".fg(ratatui::style::Color::LightGreen),
+            format!("(Input").fg(ratatui::style::Color::Gray),
+            "(F3)".fg(highlight_color),
+            format!(": {} ", self.input_mode).fg(ratatui::style::Color::Gray),
+            format!("CRLF").fg(ratatui::style::Color::Gray),
+            "(F4)".fg(highlight_color),
+            format!(": {}", self.crlf).fg(ratatui::style::Color::Gray),
+        ]);
+
         let block = Block::bordered()
-            .title(Line::from(top).left_aligned())
+            .title(header)
             .border_set(border::THICK)
             .border_style(Style::default().fg(highlight_color));
 
         let pg = Paragraph::new(Line::from(vec![
-            "TX".fg(ratatui::style::Color::LightGreen),
-            format!("({}):", self.input_mode).fg(ratatui::style::Color::Gray),
+            "Send:".fg(ratatui::style::Color::Gray),
             format!("{}", String::from_utf8_lossy(&self.send_buffer))
                 .fg(ratatui::style::Color::Gray),
         ]));
@@ -65,23 +79,15 @@ impl ApplicationMode for InteractiveMode
     }
 }
 
-impl InteractiveMode
-{
-
-    pub fn new(command_sender : Sender<SerialCommand>) -> Self
-    {
-        Self
-        {
+impl InteractiveMode {
+    pub fn new(command_sender: Sender<SerialCommand>) -> Self {
+        Self {
             active: false,
             send_buffer: Vec::new(),
             input_mode: InputMode::Default,
             command_sender,
-            crlf_setting: CRLFSetting::None
+            crlf: CRLFSetting::None,
         }
-    }
-
-    pub fn set_crlf(&mut self, crlf_setting: CRLFSetting) {
-        self.crlf_setting = crlf_setting;
     }
 
     /// Converts two hexadecimal bytes into a single `char`.
@@ -105,30 +111,30 @@ impl InteractiveMode
         char::from_u32(byte as u32).unwrap()
     }
 
-/// if hex input, convert data to bytes by aggregating 2 hex chars into one byte
-fn apply_input_mode(&mut self) {
-    // if hex input, convert data to bytes by aggregating 2 hex chars into one byte
-    if self.input_mode == InputMode::Hex {
-        let mut new_buffer: Vec<u8> = vec![];
-        let mut idx: usize = 0;
-        while idx < self.send_buffer.len() - 1 {
-            if self.send_buffer[idx] as char == ' ' {
-                idx += 1;
-                continue;
+    /// if hex input, convert data to bytes by aggregating 2 hex chars into one byte
+    fn apply_input_mode(&mut self) {
+        // if hex input, convert data to bytes by aggregating 2 hex chars into one byte
+        if self.input_mode == InputMode::Hex {
+            let mut new_buffer: Vec<u8> = vec![];
+            let mut idx: usize = 0;
+            while idx < self.send_buffer.len() - 1 {
+                if self.send_buffer[idx] as char == ' ' {
+                    idx += 1;
+                    continue;
+                }
+                let b0 = (self.send_buffer[idx] as char).to_digit(16).unwrap() as u8;
+                let b1 = (self.send_buffer[idx + 1] as char).to_digit(16).unwrap() as u8;
+                new_buffer.push(self.two_hex_bytes_to_char(b0, b1) as u8);
+                idx += 2;
             }
-            let b0 = (self.send_buffer[idx] as char).to_digit(16).unwrap() as u8;
-            let b1 = (self.send_buffer[idx + 1] as char).to_digit(16).unwrap() as u8;
-            new_buffer.push(self.two_hex_bytes_to_char(b0, b1) as u8);
-            idx += 2;
+            self.send_buffer = new_buffer;
         }
-        self.send_buffer = new_buffer;
     }
-}
 
     /// Adds the necessary CRLF bytes to the send buffer according to the
     /// current CRLF setting.
     fn apply_crlf_setting(&mut self) {
-        match self.crlf_setting {
+        match self.crlf {
             CRLFSetting::CRLF => {
                 self.send_buffer.push(b'\r');
                 self.send_buffer.push(b'\n');
@@ -143,7 +149,7 @@ fn apply_input_mode(&mut self) {
         }
     }
 
-        /// Sends the contents of the `send_buffer` to the serial port.
+    /// Sends the contents of the `send_buffer` to the serial port.
     /// The contents of `send_buffer` are processed according to the current
     /// `input_mode` and `crlf` settings before being sent.
     fn send_tx_buffer(&mut self) {
@@ -153,11 +159,10 @@ fn apply_input_mode(&mut self) {
         self.send_buffer.clear();
     }
 
-        /// Rotates the input mode through the list of available input modes. The input modes
+    /// Rotates the input mode through the list of available input modes. The input modes
     /// are cycled in order, so if the input mode is Default, it will be set to Hex, and
     /// vice versa.
     pub fn rotate_input_mode(&mut self) {
-        //println!("Here!");
         let mut selected_idx = INPUT_MODES
             .iter()
             .position(|&x| x == self.input_mode)
@@ -167,7 +172,24 @@ fn apply_input_mode(&mut self) {
         self.input_mode = INPUT_MODES[selected_idx];
     }
 
+    /// Rotates the CRLF setting.
+    ///
+    /// The following settings are available:
+    /// None: No data is appended
+    /// CR: A CR character is appended after each user input
+    /// LF: An LF character is appended after each user input
+    /// CRLF: A CR and an LF character are appended after each user input
+    fn rotate_crlf_setting(&mut self) {
+        let mut selected_idx = CRLF_SETTINGS
+            .iter()
+            .position(|&x| x == self.crlf)
+            .unwrap_or(0);
+        selected_idx += 1;
+        selected_idx %= CRLF_SETTINGS.len();
+        self.crlf = CRLF_SETTINGS[selected_idx];
+    }
+
     fn send_command(&self, cmd: SerialCommand) {
-       self.command_sender.send(cmd).unwrap();
+        self.command_sender.send(cmd).unwrap();
     }
 }

@@ -1,10 +1,19 @@
 use std::time::Duration;
 
 use crossterm::event::KeyCode;
-use ratatui::{style::{Style, Stylize}, symbols::border, text::Line, widgets::{Block, Paragraph}};
+use ratatui::{
+    style::{Style, Stylize},
+    symbols::border,
+    text::Line,
+    widgets::{Block, Paragraph},
+};
 
-use crate::{mode::ApplicationMode, portthread::SerialContext, serialtypes::{BAUD_RATES, DATABITS, PARITY, STOP_BITS}, CRLFSetting, DisplayMode, CRLF_SETTINGS, DISPLAY_MODES};
-
+use crate::{
+    mode::ApplicationMode,
+    portthread::SerialContext,
+    serialtypes::{BAUD_RATES, DATABITS, PARITY, STOP_BITS},
+    CRLFSetting, DisplayMode, DISPLAY_MODES,
+};
 
 #[derive(Debug)]
 pub struct SettingsMode {
@@ -15,11 +24,10 @@ pub struct SettingsMode {
     databits: u8,
     crlf: CRLFSetting,
     display_mode: DisplayMode,
-    active: bool
+    active: bool,
 }
 
 impl ApplicationMode for SettingsMode {
-
     fn handle_key_event(&mut self, key_event: crossterm::event::KeyEvent) {
         match key_event.code {
             KeyCode::Char('p') => self.rotate_port(),
@@ -28,12 +36,11 @@ impl ApplicationMode for SettingsMode {
             KeyCode::Char('a') => self.rotate_parity(),
             KeyCode::Char('d') => self.rotate_databits(),
             KeyCode::Char('m') => self.rotate_display_mode(),
-            KeyCode::Char('c') => self.rotate_crlf_setting(),
             //KeyCode::Enter => app.enter_interactive_mode(),
             _ => {}
         }
     }
-    
+
     fn render(&self, area: ratatui::prelude::Rect, buf: &mut ratatui::Frame) {
         let top = "Settings"; //, active mode: ".to_string() + &self.mode.to_string();
 
@@ -69,26 +76,23 @@ impl ApplicationMode for SettingsMode {
 
         buf.render_widget(opts.block(block), area);
     }
-    
+
     fn set_active_inactive(&mut self, active: bool) {
         self.active = active;
     }
-
 }
 
 impl SettingsMode {
-
     pub fn new() -> SettingsMode {
-        let mut res = Self 
-        {
-            port : "".to_string(),
-            baud : BAUD_RATES[0],
-            stopbits : STOP_BITS[0],
-            parity : PARITY[0].to_string(),
-            databits : DATABITS[3],
-            crlf : CRLFSetting::None,
-            display_mode : DisplayMode::Hex,
-            active : false,
+        let mut res = Self {
+            port: "".to_string(),
+            baud: BAUD_RATES[0],
+            stopbits: STOP_BITS[0],
+            parity: PARITY[0].to_string(),
+            databits: DATABITS[3],
+            crlf: CRLFSetting::None,
+            display_mode: DisplayMode::Hex,
+            active: false,
         };
         res.rotate_port();
         res
@@ -96,10 +100,6 @@ impl SettingsMode {
 
     pub fn get_display_mode(&self) -> DisplayMode {
         self.display_mode
-    }
-
-    pub fn get_crlf_setting(&self) -> CRLFSetting {
-        self.crlf
     }
 
     pub fn create_serial_context(&self) -> SerialContext {
@@ -242,22 +242,5 @@ impl SettingsMode {
         selected_idx += 1;
         selected_idx %= DISPLAY_MODES.len();
         self.display_mode = DISPLAY_MODES[selected_idx];
-    }
-
-    /// Rotates the CRLF setting.
-    ///
-    /// The following settings are available:
-    /// None: No data is appended
-    /// CR: A CR character is appended after each user input
-    /// LF: An LF character is appended after each user input
-    /// CRLF: A CR and an LF character are appended after each user input
-    fn rotate_crlf_setting(&mut self) {
-        let mut selected_idx = CRLF_SETTINGS
-            .iter()
-            .position(|&x| x == self.crlf)
-            .unwrap_or(0);
-        selected_idx += 1;
-        selected_idx %= CRLF_SETTINGS.len();
-        self.crlf = CRLF_SETTINGS[selected_idx];
     }
 }

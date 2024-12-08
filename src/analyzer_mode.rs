@@ -1,34 +1,40 @@
 use std::sync::mpsc::Receiver;
 
 use crossterm::event::KeyCode;
-use ratatui::{layout::{Constraint, Flex, Layout, Rect}, style::{Style, Stylize}, text::Line, widgets::{Block, Clear, List, ListDirection}, Frame};
+use ratatui::{
+    layout::{Constraint, Flex, Layout, Rect},
+    style::{Style, Stylize},
+    text::Line,
+    widgets::{Block, Clear, List, ListDirection},
+    Frame,
+};
 
-use crate::{mode::ApplicationMode, portthread::{RxTx, SerialStateMessage}, serialtypes::control_char_to_string, DisplayMode, Endianness};
-
-
+use crate::{
+    mode::ApplicationMode,
+    portthread::{RxTx, SerialStateMessage},
+    serialtypes::control_char_to_string,
+    DisplayMode, Endianness,
+};
 
 #[derive(Debug)]
-pub struct AnalyzerMode
-{
+pub struct AnalyzerMode {
     active: bool,
     display_history: Vec<SerialStateMessage>,
     scroll_offset: u32,
     analyzer_cursor_pos: usize,
     analyzer_endianness: Endianness,
-    active_display_mode: DisplayMode
+    active_display_mode: DisplayMode,
 }
 
-impl AnalyzerMode
-{
-    pub fn new() -> AnalyzerMode
-    {
-        AnalyzerMode{
+impl AnalyzerMode {
+    pub fn new() -> AnalyzerMode {
+        AnalyzerMode {
             active: false,
             display_history: vec![],
             scroll_offset: 0,
             analyzer_cursor_pos: 0,
             analyzer_endianness: Endianness::Little,
-            active_display_mode: DisplayMode::Hex
+            active_display_mode: DisplayMode::Hex,
         }
     }
 }
@@ -49,8 +55,6 @@ impl ApplicationMode for AnalyzerMode {
     fn set_active_inactive(&mut self, active: bool) {
         self.active = active;
     }
-
-    
 
     fn render(&self, area: ratatui::prelude::Rect, buf: &mut ratatui::Frame) {
         let highlight_color = if self.active {
@@ -76,7 +80,6 @@ impl ApplicationMode for AnalyzerMode {
 }
 
 impl AnalyzerMode {
-    
     /// Scroll up in the display history, moving the top line down by one.
     pub fn scroll_up(&mut self) {
         self.scroll_offset = self.scroll_offset.saturating_add(1);
@@ -109,8 +112,11 @@ impl AnalyzerMode {
         }
     }
 
-    pub fn update_data(&mut self, data_source: &Receiver<SerialStateMessage>, display_mode: DisplayMode) 
-    {
+    pub fn update_data(
+        &mut self,
+        data_source: &Receiver<SerialStateMessage>,
+        display_mode: DisplayMode,
+    ) {
         self.update_history_with_incoming_data(data_source);
         self.active_display_mode = display_mode;
     }
@@ -182,11 +188,7 @@ impl AnalyzerMode {
         }
     }
 
-    fn build_list_items(
-        &self,
-        analyzer_data: &mut Vec<u8>,
-        max_num_rows: usize,
-    ) -> Vec<Line<'_>> {
+    fn build_list_items(&self, analyzer_data: &mut Vec<u8>, max_num_rows: usize) -> Vec<Line<'_>> {
         let mut line_index = 0;
         let items: Vec<Line> = self
             .display_history
@@ -261,7 +263,6 @@ impl AnalyzerMode {
             .collect();
         items
     }
-
 
     /// Renders the analyzer window. This window will appear if the display mode is hex
     /// and the mode is analyzer. The window will contain the byte, u16, i16, u32, i32, f32, u64, i64, and f64

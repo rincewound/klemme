@@ -7,21 +7,21 @@ use std::{
 
 use crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind};
 use mode::{ApplicationMode, Mode};
-use portthread::{SerialCommand,SerialStateMessage};
+use portthread::{SerialCommand, SerialStateMessage};
 use ratatui::{
-    layout::{Constraint, Layout, Rect},    
+    layout::{Constraint, Layout, Rect},
     DefaultTerminal, Frame,
 };
 
 use std::sync::mpsc;
 use std::sync::mpsc::{Receiver, Sender};
 
-mod portthread;
-mod serialtypes;
-mod mode;
-mod settings_mode;
 mod analyzer_mode;
 mod interactive_mode;
+mod mode;
+mod portthread;
+mod serialtypes;
+mod settings_mode;
 
 const DISPLAY_MODES: [DisplayMode; 5] = [
     DisplayMode::Decimal,
@@ -39,8 +39,6 @@ const CRLF_SETTINGS: [CRLFSetting; 4] = [
 ];
 
 const INPUT_MODES: [InputMode; 2] = [InputMode::Default, InputMode::Hex];
-
-
 
 #[derive(Debug, Default, PartialEq)]
 pub enum Endianness {
@@ -122,7 +120,7 @@ fn main() -> io::Result<()> {
 
 #[derive(Debug)]
 pub struct App {
-    exit: bool,    
+    exit: bool,
     mode: Mode,
     command_sender: Sender<SerialCommand>,
     state_receiver: Receiver<SerialStateMessage>,
@@ -134,15 +132,15 @@ pub struct App {
 impl Default for App {
     fn default() -> Self {
         let (stx, rtx): (Sender<SerialStateMessage>, Receiver<SerialStateMessage>) =
-        mpsc::channel();
+            mpsc::channel();
         let (tx, rx): (Sender<SerialCommand>, Receiver<SerialCommand>) = mpsc::channel();
         portthread::port_background_thread(rx, stx);
 
         let data = App {
-            mode: Mode::Normal,                       
+            mode: Mode::Normal,
             exit: false,
             command_sender: tx.clone(),
-            state_receiver: rtx,                       
+            state_receiver: rtx,
             settingsmode: settings_mode::SettingsMode::new(),
             analyzermode: analyzer_mode::AnalyzerMode::new(),
             interactivemode: interactive_mode::InteractiveMode::new(tx),
@@ -196,7 +194,7 @@ impl App {
             Mode::Settings => self.settingsmode.set_active_inactive(true),
             Mode::Interactive => self.interactivemode.set_active_inactive(true),
             Mode::Analyzer => self.analyzermode.set_active_inactive(true),
-            _ => {},
+            _ => {}
         }
 
         self.mode = mode;
@@ -213,7 +211,6 @@ impl App {
     }
 
     fn do_interactive_mode(&mut self, key_event: KeyEvent) {
-        self.interactivemode.set_crlf(self.settingsmode.get_crlf_setting());        
         self.interactivemode.handle_key_event(key_event);
         match key_event.code {
             KeyCode::Up => self.analyzermode.scroll_up(),
@@ -224,7 +221,6 @@ impl App {
 
     fn do_analyzer_mode(&mut self, key_event: KeyEvent) {
         self.analyzermode.handle_key_event(key_event);
-
     }
 
     fn do_normal_mode(&mut self, key_event: KeyEvent) {
@@ -278,9 +274,10 @@ impl App {
     }
 
     fn draw_rxtxbuffer(&mut self, area: Rect, buf: &mut Frame) {
-        self.analyzermode.update_data(&self.state_receiver, self.settingsmode.get_display_mode());
+        self.analyzermode
+            .update_data(&self.state_receiver, self.settingsmode.get_display_mode());
         self.analyzermode.render(area, buf);
-    }    
+    }
 
     fn draw_tx_line(&self, area: Rect, buf: &mut Frame) {
         self.interactivemode.render(area, buf);
@@ -302,7 +299,6 @@ impl App {
         self.draw_tx_line(chunks[2], frame);
     }
 
-    
     /// Enters the interactive mode, which establishes a connection to the serial port
     /// with the current configuration settings. The function configures the serial port
     /// settings, such as baud rate, stop bits, parity, and character size, and opens the port.
@@ -314,7 +310,7 @@ impl App {
     /// This function will panic if there is a failure in opening the serial port or setting
     /// the read/write timeouts.
     fn enter_interactive_mode(&mut self) {
-        let ctx = self.settingsmode.create_serial_context();    
+        let ctx = self.settingsmode.create_serial_context();
         self.send_command(SerialCommand::Start(ctx));
         self.enable_mode(mode::Mode::Interactive);
     }
@@ -346,7 +342,6 @@ impl App {
     /// * `cmd` - A `SerialCommand` variant to be sent to the background thread. This could
     ///   be a command to start, stop, or send data through the serial port.
     fn send_command(&self, cmd: SerialCommand) {
-        self.command_sender.send(cmd).unwrap();        
+        self.command_sender.send(cmd).unwrap();
     }
-
 }
