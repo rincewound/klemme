@@ -31,22 +31,6 @@ const DISPLAY_MODES: [DisplayMode; 5] = [
     DisplayMode::MixedDec,
 ];
 
-const CRLF_SETTINGS: [CRLFSetting; 4] = [
-    CRLFSetting::None,
-    CRLFSetting::CR,
-    CRLFSetting::LF,
-    CRLFSetting::CRLF,
-];
-
-const INPUT_MODES: [InputMode; 2] = [InputMode::Default, InputMode::Hex];
-
-#[derive(Debug, Default, PartialEq)]
-pub enum Endianness {
-    Big,
-    #[default]
-    Little,
-}
-
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum DisplayMode {
     Decimal,
@@ -54,49 +38,6 @@ pub enum DisplayMode {
     Ascii,
     MixedHex,
     MixedDec,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub enum InputMode {
-    Default,
-    Hex,
-}
-
-#[derive(Debug, PartialEq, Clone, Copy)]
-pub enum CRLFSetting {
-    None,
-    CR,
-    LF,
-    CRLF,
-}
-
-impl Display for Endianness {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Endianness::Big => write!(f, "Big"),
-            Endianness::Little => write!(f, "Little"),
-        }
-    }
-}
-
-impl Display for CRLFSetting {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            CRLFSetting::None => write!(f, "None"),
-            CRLFSetting::CR => write!(f, "CR"),
-            CRLFSetting::LF => write!(f, "LF"),
-            CRLFSetting::CRLF => write!(f, "CRLF"),
-        }
-    }
-}
-
-impl Display for InputMode {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            InputMode::Default => write!(f, "Default"),
-            InputMode::Hex => write!(f, "Hex"),
-        }
-    }
 }
 
 impl Display for DisplayMode {

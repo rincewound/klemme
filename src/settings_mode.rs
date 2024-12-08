@@ -12,7 +12,7 @@ use crate::{
     mode::ApplicationMode,
     portthread::SerialContext,
     serialtypes::{BAUD_RATES, DATABITS, PARITY, STOP_BITS},
-    CRLFSetting, DisplayMode, DISPLAY_MODES,
+    DisplayMode, DISPLAY_MODES,
 };
 
 #[derive(Debug)]
@@ -22,7 +22,6 @@ pub struct SettingsMode {
     stopbits: u8,
     parity: String,
     databits: u8,
-    crlf: CRLFSetting,
     display_mode: DisplayMode,
     active: bool,
 }
@@ -70,8 +69,6 @@ impl ApplicationMode for SettingsMode {
             "Display".fg(ratatui::style::Color::Gray),
             "M".fg(highlight_color),
             format!("ode:{} ", self.display_mode).fg(ratatui::style::Color::Gray),
-            "C".fg(highlight_color),
-            format!("RLF:{} ", self.crlf).fg(ratatui::style::Color::Gray),
         ]));
 
         buf.render_widget(opts.block(block), area);
@@ -90,7 +87,6 @@ impl SettingsMode {
             stopbits: STOP_BITS[0],
             parity: PARITY[0].to_string(),
             databits: DATABITS[3],
-            crlf: CRLFSetting::None,
             display_mode: DisplayMode::Hex,
             active: false,
         };

@@ -1,4 +1,4 @@
-use std::sync::mpsc::Sender;
+use std::{fmt::Display, sync::mpsc::Sender};
 
 use crossterm::event::KeyCode;
 use ratatui::{
@@ -8,10 +8,50 @@ use ratatui::{
     widgets::{Block, Paragraph},
 };
 
-use crate::{
-    mode::ApplicationMode, portthread::SerialCommand, CRLFSetting, InputMode, CRLF_SETTINGS,
-    INPUT_MODES,
-};
+use crate::{mode::ApplicationMode, portthread::SerialCommand};
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum InputMode {
+    Default,
+    Hex,
+}
+
+const INPUT_MODES: [InputMode; 2] = [InputMode::Default, InputMode::Hex];
+
+#[derive(Debug, PartialEq, Clone, Copy)]
+pub enum CRLFSetting {
+    None,
+    CR,
+    LF,
+    CRLF,
+}
+
+const CRLF_SETTINGS: [CRLFSetting; 4] = [
+    CRLFSetting::None,
+    CRLFSetting::CR,
+    CRLFSetting::LF,
+    CRLFSetting::CRLF,
+];
+
+impl Display for CRLFSetting {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            CRLFSetting::None => write!(f, "None"),
+            CRLFSetting::CR => write!(f, "CR"),
+            CRLFSetting::LF => write!(f, "LF"),
+            CRLFSetting::CRLF => write!(f, "CRLF"),
+        }
+    }
+}
+
+impl Display for InputMode {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            InputMode::Default => write!(f, "Default"),
+            InputMode::Hex => write!(f, "Hex"),
+        }
+    }
+}
 
 #[derive(Debug)]
 pub struct InteractiveMode {

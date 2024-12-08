@@ -1,4 +1,4 @@
-use std::sync::mpsc::Receiver;
+use std::{fmt::Display, sync::mpsc::Receiver};
 
 use crossterm::event::KeyCode;
 use ratatui::{
@@ -13,8 +13,23 @@ use crate::{
     mode::ApplicationMode,
     portthread::{RxTx, SerialStateMessage},
     serialtypes::control_char_to_string,
-    DisplayMode, Endianness,
+    DisplayMode,
 };
+
+#[derive(Debug, Default, PartialEq)]
+pub enum Endianness {
+    Big,
+    #[default]
+    Little,
+}
+impl Display for Endianness {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Endianness::Big => write!(f, "Big"),
+            Endianness::Little => write!(f, "Little"),
+        }
+    }
+}
 
 #[derive(Debug)]
 pub struct AnalyzerMode {
