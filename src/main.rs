@@ -7,6 +7,7 @@ use std::{
 };
 
 use crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind};
+use portthread::{RxTx, SerialCommand, SerialContext, SerialStateMessage};
 use ratatui::{
     layout::{Constraint, Flex, Layout, Rect},
     style::{Style, Stylize},
@@ -16,17 +17,13 @@ use ratatui::{
     DefaultTerminal, Frame,
 };
 use serial2::Settings;
+use serialtypes::{BAUD_RATES, DATABITS, PARITY, STOP_BITS};
 
 use std::sync::mpsc;
 use std::sync::mpsc::{Receiver, Sender};
 
-const BAUD_RATES: [u32; 8] = [9600, 19200, 38400, 57600, 115200, 230400, 460800, 921600];
-
-const STOP_BITS: [u8; 3] = [1, 2, 3];
-
-const PARITY: [&str; 3] = ["None", "Odd", "Even"];
-
-const DATABITS: [u8; 5] = [5, 6, 7, 8, 9];
+mod portthread;
+mod serialtypes;
 
 const DISPLAY_MODES: [DisplayMode; 5] = [
     DisplayMode::Decimal,
@@ -61,13 +58,6 @@ pub enum Endianness {
     Little,
 }
 
-#[derive(Debug, Default, PartialEq)]
-pub enum RxTx {
-    #[default]
-    Rx,
-    Tx,
-}
-
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum DisplayMode {
     Decimal,
@@ -89,35 +79,6 @@ pub enum CRLFSetting {
     CR,
     LF,
     CRLF,
-}
-#[derive(Debug)]
-enum PortThreadState {
-    Stopped,
-    Running(SerialContext),
-}
-
-impl PartialEq for PortThreadState {
-    fn eq(&self, other: &Self) -> bool {
-        match (self, other) {
-            (PortThreadState::Stopped, PortThreadState::Stopped) => true,
-            (PortThreadState::Running(_), PortThreadState::Running(_)) => true,
-            _ => false,
-        }
-    }
-}
-
-enum SerialCommand {
-    Stop,
-    Start(SerialContext),
-    Send(Vec<u8>),
-}
-
-#[derive(Debug)]
-enum SerialStateMessage {
-    DataEvent(HistoryEntry),
-    ErrorEvent(String),
-    Started,
-    Stopped,
 }
 
 impl Display for Endianness {
@@ -161,15 +122,6 @@ impl Display for DisplayMode {
     }
 }
 
-impl Display for RxTx {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            RxTx::Rx => write!(f, "RX"),
-            RxTx::Tx => write!(f, "TX"),
-        }
-    }
-}
-
 impl Display for Mode {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
@@ -181,29 +133,11 @@ impl Display for Mode {
     }
 }
 
-#[derive(Debug, Default, PartialEq)]
-struct HistoryEntry {
-    rx_tx: RxTx,
-    data: vec::Vec<u8>,
-}
-
 fn main() -> io::Result<()> {
     let mut terminal = ratatui::init();
     let app_result = App::default().run(&mut terminal);
     ratatui::restore();
     app_result
-}
-
-#[derive(Debug)]
-struct SerialContext {
-    port_name: String,
-    com_port: Option<serial2::SerialPort>,
-}
-
-impl PartialEq for SerialContext {
-    fn eq(&self, other: &Self) -> bool {
-        self.port_name == other.port_name
-    }
 }
 
 #[derive(Debug)]
@@ -268,7 +202,7 @@ impl App {
         let (tx, rx): (Sender<SerialCommand>, Receiver<SerialCommand>) = mpsc::channel();
         self.command_sender = Some(tx);
         self.state_receiver = Some(rtx);
-        self.port_background_thread(rx, stx);
+        portthread::port_background_thread(rx, stx);
 
         while !self.exit {
             terminal.draw(|frame| self.draw(frame))?;
@@ -950,10 +884,7 @@ impl App {
             .expect("Failed to set write timeout.");
         p.flush().expect("Failed to flush port.");
         let _ = p.discard_buffers();
-        let ctx = SerialContext {
-            com_port: Some(p),
-            port_name: self.port.clone(),
-        };
+        let ctx = SerialContext::new(self.port.clone(), p);
 
         self.send_command(SerialCommand::Start(ctx));
     }
@@ -1045,115 +976,6 @@ impl App {
             }
             self.send_buffer = new_buffer;
         }
-    }
-
-    /// Returns the next command from the main thread, or `None` if there are no commands
-    /// to process.
-    ///
-    /// # Behavior
-    ///
-    /// If the serial port is stopped, this function will block until a command is received.
-    /// If the serial port is running, this function will non-blockingly return the next command
-    /// if there is one, or `None` if there are no commands to process.
-    fn receive_command(
-        state: &PortThreadState,
-        rx: &Receiver<SerialCommand>,
-    ) -> Option<SerialCommand> {
-        if *state == PortThreadState::Stopped {
-            if let Ok(rxd) = rx.recv() {
-                return Some(rxd);
-            }
-            return None;
-        } else {
-            if let Ok(rxd) = rx.try_recv() {
-                return Some(rxd);
-            }
-            return None;
-        };
-    }
-
-    /// Starts a background thread that is responsible for managing the serial port.
-    /// This thread will receive commands from the main thread and act accordingly.
-    /// The main thread should send commands on the `rx` channel and the background
-    /// thread will send events on the `tx` channel.
-    ///
-    /// # Events
-    ///
-    /// The background thread will send the following events on the `tx` channel:
-    ///
-    /// - `SerialStateMessage::Started`: The background thread has successfully
-    ///   opened the serial port and is ready to receive and send data.
-    /// - `SerialStateMessage::Stopped`: The background thread has stopped and
-    ///   closed the serial port.
-    /// - `SerialStateMessage::DataEvent(HistoryEntry)`: The background thread
-    ///   has received data from the serial port and is sending it back to the
-    ///   main thread.
-    /// - `SerialStateMessage::ErrorEvent(String)`: The background thread has
-    ///   encountered an error while writing to the serial port.
-    fn port_background_thread(&self, rx: Receiver<SerialCommand>, tx: Sender<SerialStateMessage>) {
-        thread::spawn(move || {
-            let mut state = PortThreadState::Stopped;
-            loop {
-                let mut data_to_send: Vec<u8> = vec![];
-
-                // if the state is stopped, wait until rx receives something:
-                let _cmd = Self::receive_command(&state, &rx);
-
-                if let Some(cmd) = _cmd {
-                    match cmd {
-                        SerialCommand::Send(data) => {
-                            data_to_send = data;
-                        }
-                        SerialCommand::Stop => {
-                            if state != PortThreadState::Stopped {
-                                let _ = tx.send(SerialStateMessage::Stopped);
-                                state = PortThreadState::Stopped;
-                            }
-                        }
-                        SerialCommand::Start(ctx) => {
-                            if state == PortThreadState::Stopped {
-                                let _ = tx.send(SerialStateMessage::Started);
-                                state = PortThreadState::Running(ctx);
-                            }
-                        }
-                    }
-                }
-
-                match state {
-                    PortThreadState::Stopped => {}
-                    PortThreadState::Running(ref ctx) => {
-                        if let Some(p) = &ctx.com_port {
-                            if data_to_send.len() != 0 {
-                                if let Ok(_) = p.write(&data_to_send) {
-                                    let entry = HistoryEntry {
-                                        rx_tx: RxTx::Tx,
-                                        data: data_to_send.clone(),
-                                    };
-                                    tx.send(SerialStateMessage::DataEvent(entry)).unwrap();
-                                } else {
-                                    tx.send(SerialStateMessage::ErrorEvent(
-                                        "Failed to write to port".to_string(),
-                                    ))
-                                    .unwrap();
-                                }
-                            }
-                            // receive data:
-                            let mut buffer: [u8; 256] = [0u8; 256];
-                            if let Ok(data) = p.read(&mut buffer) {
-                                let received_bytes = buffer[0..data].to_vec();
-
-                                let entry = HistoryEntry {
-                                    rx_tx: RxTx::Rx,
-                                    data: received_bytes,
-                                };
-                                tx.send(SerialStateMessage::DataEvent(entry)).unwrap();
-                                data_to_send.clear();
-                            }
-                        }
-                    }
-                }
-            }
-        });
     }
 
     /// Sends a serial command to the background thread via the command sender channel.
