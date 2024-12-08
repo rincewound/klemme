@@ -33,6 +33,8 @@ Normal --> Analyzer
 ### General
 
 * esc - Change to normal mode
+* F2 - Change display mode
+* F3 - Change input mode
 * F10 - Clear history
 
 ### Normal Mode
@@ -50,20 +52,18 @@ Normal --> Analyzer
 * a - select parity
 * d - select databits
 * m - select display mode
-* c - select CRLF settings
 
 ### Interactive
 
 * Up - Scroll Receive Buffer Up
 * Down - Scroll Receive Buffer Down
 * Enter - Send current send buffer (according to CRLF and Input settings)
-* F3 - Change input mode
+* F4 - Change CRLF mode
 
 ### Analyzer
 
 _Note_: Analyzer Features are only available in display HEX mode.
 
-* F2 - Change display mode
 * Up/Down - Scroll Receive buffer
 * Left/Right - Move analyzer cursor
 * e - switch endianness
