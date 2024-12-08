@@ -94,13 +94,6 @@ impl Default for App {
 impl App {
     /// runs the application's main loop until the user quits
     pub fn run(&mut self, terminal: &mut DefaultTerminal) -> io::Result<()> {
-        // let (stx, rtx): (Sender<SerialStateMessage>, Receiver<SerialStateMessage>) =
-        //     mpsc::channel();
-        // let (tx, rx): (Sender<SerialCommand>, Receiver<SerialCommand>) = mpsc::channel();
-        // self.command_sender = Some(tx);
-        // self.state_receiver = Some(rtx);
-        // portthread::port_background_thread(rx, stx);
-
         while !self.exit {
             terminal.draw(|frame| self.draw(frame))?;
             self.handle_events()?;

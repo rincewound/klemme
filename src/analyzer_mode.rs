@@ -287,10 +287,9 @@ impl AnalyzerMode {
             return;
         }
 
-        // ToDo!
-        // if self.settingsmode.get_display_mode() != DisplayMode::Hex {
-        //     return;
-        // }
+        if self.active_display_mode != DisplayMode::Hex {
+            return;
+        }
 
         if self.analyzer_cursor_pos >= analyzer_data.len() {
             return;
