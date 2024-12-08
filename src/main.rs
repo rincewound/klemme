@@ -390,8 +390,8 @@ impl App {
         self.exit = true;
     }
 
-    fn draw_header(&self, area: Rect, buf: &mut Frame) {
-        let top = "Settings";
+    fn draw_settings(&self, area: Rect, buf: &mut Frame) {
+        let top = "Settings, active mode: ".to_string() + &self.mode.to_string();
 
         let highlight_color = if self.mode == Mode::Settings {
             ratatui::style::Color::Red
@@ -406,21 +406,21 @@ impl App {
 
         let opts = Paragraph::new(Line::from(vec![
             "P".fg(highlight_color),
-            format!("ort:{};", self.port).fg(ratatui::style::Color::Gray),
+            format!("ort:{} ", self.port).fg(ratatui::style::Color::Gray),
             "B".fg(highlight_color),
-            format!("aud:{};", self.baud).fg(ratatui::style::Color::Gray),
-            "S".fg(highlight_color),
-            format!("topbits:{};", self.stopbits).fg(ratatui::style::Color::Gray),
+            format!("aud:{} ", self.baud).fg(ratatui::style::Color::Gray),
+            "D".fg(highlight_color),
+            format!("atabits:{} ", self.databits).fg(ratatui::style::Color::Gray),
             "P".fg(ratatui::style::Color::Gray),
             "a".fg(highlight_color),
-            format!("rity:{};", self.parity).fg(ratatui::style::Color::Gray),
-            "D".fg(highlight_color),
-            format!("atabits:{}", self.databits).fg(ratatui::style::Color::Gray),
-            " Display".fg(ratatui::style::Color::Gray),
+            format!("rity:{} ", self.parity).fg(ratatui::style::Color::Gray),
+            "S".fg(highlight_color),
+            format!("topbits:{} ", self.stopbits).fg(ratatui::style::Color::Gray),
+            "Display".fg(ratatui::style::Color::Gray),
             "M".fg(highlight_color),
-            format!("ode:{};", self.display_mode).fg(ratatui::style::Color::Gray),
+            format!("ode:{} ", self.display_mode).fg(ratatui::style::Color::Gray),
             "C".fg(highlight_color),
-            format!("RLF:{}", self.crlf).fg(ratatui::style::Color::Gray),
+            format!("RLF:{} ", self.crlf).fg(ratatui::style::Color::Gray),
         ]));
 
         buf.render_widget(opts.block(block), area);
@@ -765,7 +765,7 @@ impl App {
             Constraint::Length(3),
         ])
         .split(frame.area());
-        self.draw_header(chunks[0], frame);
+        self.draw_settings(chunks[0], frame);
         self.draw_rxtxbuffer(chunks[1], frame);
         self.draw_tx_line(chunks[2], frame);
     }
@@ -811,11 +811,10 @@ impl App {
                     .unwrap()
                     .to_str()
                     .unwrap()
-                    .to_string();    
-            }
-            else {
+                    .to_string();
+            } else {
                 self.port = first_port_name.to_string();
-            }            
+            }
         }
     }
 
@@ -950,8 +949,11 @@ impl App {
         p.set_write_timeout(Duration::from_millis(2500))
             .expect("Failed to set write timeout.");
         p.flush().expect("Failed to flush port.");
-        let _= p.discard_buffers();
-        let ctx = SerialContext { com_port: Some(p), port_name: self.port.clone() };
+        let _ = p.discard_buffers();
+        let ctx = SerialContext {
+            com_port: Some(p),
+            port_name: self.port.clone(),
+        };
 
         self.send_command(SerialCommand::Start(ctx));
     }
@@ -1053,21 +1055,20 @@ impl App {
     /// If the serial port is stopped, this function will block until a command is received.
     /// If the serial port is running, this function will non-blockingly return the next command
     /// if there is one, or `None` if there are no commands to process.
-    fn receive_command(state: &PortThreadState, rx: &Receiver<SerialCommand>) -> Option<SerialCommand>
-    {
+    fn receive_command(
+        state: &PortThreadState,
+        rx: &Receiver<SerialCommand>,
+    ) -> Option<SerialCommand> {
         if *state == PortThreadState::Stopped {
-            if let Ok(rxd) = rx.recv()
-            {
-                return Some(rxd)
+            if let Ok(rxd) = rx.recv() {
+                return Some(rxd);
             }
-            return  None
-        }else
-        {
-            if let Ok(rxd )= rx.try_recv()
-            {
-                return  Some(rxd)
+            return None;
+        } else {
+            if let Ok(rxd) = rx.try_recv() {
+                return Some(rxd);
             }
-            return  None
+            return None;
         };
     }
 
@@ -1097,9 +1098,8 @@ impl App {
 
                 // if the state is stopped, wait until rx receives something:
                 let _cmd = Self::receive_command(&state, &rx);
-                
 
-                if let Some(cmd) = _cmd{
+                if let Some(cmd) = _cmd {
                     match cmd {
                         SerialCommand::Send(data) => {
                             data_to_send = data;
@@ -1149,7 +1149,7 @@ impl App {
                                 tx.send(SerialStateMessage::DataEvent(entry)).unwrap();
                                 data_to_send.clear();
                             }
-                        }                        
+                        }
                     }
                 }
             }

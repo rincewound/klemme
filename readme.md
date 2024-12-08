@@ -61,6 +61,8 @@ Normal --> Analyzer
 
 ### Analyzer
 
+_Note_: Analyzer Features are only available in display HEX mode.
+
 * F2 - Change display mode
 * Up/Down - Scroll Receive buffer
 * Left/Right - Move analyzer cursor
