@@ -34,7 +34,6 @@ Normal --> Analyzer
 
 * esc - Change to normal mode
 * F2 - Change display mode
-* F3 - Change input mode
 * F10 - Clear history
 
 ### Normal Mode
@@ -55,6 +54,7 @@ Normal --> Analyzer
 
 ### Interactive
 
+* F3 - Change input mode
 * Up - Scroll Receive Buffer Up
 * Down - Scroll Receive Buffer Down
 * Enter - Send current send buffer (according to CRLF and Input settings)

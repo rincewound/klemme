@@ -180,9 +180,6 @@ impl App {
         if key_event.code == KeyCode::F(2) {
             self.settingsmode.rotate_display_mode();
         }
-        if key_event.code == KeyCode::F(3) {
-            self.interactivemode.rotate_input_mode();
-        }
 
         if key_event.code == KeyCode::F(10) {
             self.analyzermode.clear_history();

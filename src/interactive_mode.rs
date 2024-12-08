@@ -66,6 +66,7 @@ impl ApplicationMode for InteractiveMode {
     fn handle_key_event(&mut self, key_event: crossterm::event::KeyEvent) {
         match key_event.code {
             KeyCode::F(4) => self.rotate_crlf_setting(),
+            KeyCode::F(3) => self.rotate_input_mode(),
             KeyCode::Char(x) => {
                 if self.input_mode == InputMode::Hex {
                     if x.is_ascii_hexdigit() || x == ' ' {

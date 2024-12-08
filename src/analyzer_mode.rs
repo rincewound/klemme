@@ -298,7 +298,7 @@ impl AnalyzerMode {
         let mut items: Vec<String> = vec![];
         // Use the cursor position to obtain the analyzer data: 1 byte, 2 byte, 4 bytes
         let one_byte = analyzer_data[self.analyzer_cursor_pos];
-        items.push(format!("binary {:08b}", one_byte));
+        items.push(format!("binary (MSB first): {:08b}", one_byte));
         items.push(format!("u8: {}", one_byte));
 
         if (self.analyzer_cursor_pos as i32) <= (analyzer_data.len() as i32 - 2) {
