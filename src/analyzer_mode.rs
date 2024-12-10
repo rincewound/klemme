@@ -70,8 +70,6 @@ impl ApplicationMode for AnalyzerMode {
             KeyCode::Down => self.scroll_analyzer_cursor_down(),
             KeyCode::PageUp => self.scroll_up(),
             KeyCode::PageDown => self.scroll_down(),
-
-            //KeyCode::F(2) => self.settingsmode.rotate_display_mode(),
             KeyCode::Char('e') => self.rotate_analyzer_endianness(),
             _ => {}
         }
@@ -156,6 +154,7 @@ impl AnalyzerMode {
 
     pub fn clear_history(&mut self) {
         self.display_history.clear();
+        self.display_history.shrink_to_fit();
     }
 
     fn popup_area(area: Rect, percent_x: u16, percent_y: u16) -> Rect {
