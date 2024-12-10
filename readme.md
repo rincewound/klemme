@@ -54,8 +54,8 @@ Normal --> Analyzer
 
 ### Interactive
 
-* Up - Scroll Receive Buffer Up
-* Down - Scroll Receive Buffer Down
+* PageUp - Scroll Receive Buffer Up
+* PageDown - Scroll Receive Buffer Down
 * Enter - Send current send buffer (according to CRLF and Input settings)
 * F3 - Change input mode
 * F4 - Change CRLF mode
@@ -65,8 +65,8 @@ Normal --> Analyzer
 
 _Note_: Analyzer Features are only available in display HEX mode.
 
-* Up/Down - Scroll Receive buffer
-* Left/Right - Move analyzer cursor
+* PageUp/PageDown - Scroll Receive buffer
+* Up/Down/Left/Right - Move analyzer cursor
 * e - switch endianness
 
 ## Display modes

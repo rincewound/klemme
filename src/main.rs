@@ -147,8 +147,8 @@ impl App {
     fn do_interactive_mode(&mut self, key_event: KeyEvent) {
         self.interactivemode.handle_key_event(key_event);
         match key_event.code {
-            KeyCode::Up => self.analyzermode.scroll_up(),
-            KeyCode::Down => self.analyzermode.scroll_down(),
+            KeyCode::PageUp => self.analyzermode.scroll_up(),
+            KeyCode::PageDown => self.analyzermode.scroll_down(),
             _ => {}
         }
     }
