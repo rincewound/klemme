@@ -101,3 +101,7 @@ Examples:
 * Input: AB CF  Output Bytes: 0xAB, 0xCF
 * Input: BCEF Output Bytes: 0xBC 0xEF
 * Input: B C DF Output Bytes: 0xBC 0xDF
+
+## Settings
+
+klemme will attempt to store a .klemme file in the folder it is executed in.

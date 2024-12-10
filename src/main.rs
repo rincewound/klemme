@@ -12,6 +12,7 @@ use ratatui::{
     layout::{Constraint, Layout, Rect},
     DefaultTerminal, Frame,
 };
+use serde::{Deserialize, Serialize};
 
 use std::sync::mpsc;
 use std::sync::mpsc::{Receiver, Sender};
@@ -31,7 +32,7 @@ const DISPLAY_MODES: [DisplayMode; 5] = [
     DisplayMode::MixedDec,
 ];
 
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub enum DisplayMode {
     Decimal,
     Hex,
