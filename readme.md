@@ -12,6 +12,7 @@ for developers. klemme is a mode based application, i.e. at any given time it ca
 
 * Supports common baud rates & port settings
 * Wide range of display modes that can be applied retro actively
+* Uses less than 2 MB RAM in most circumstances
 
 ## Modes
 
