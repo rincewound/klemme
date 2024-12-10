@@ -36,6 +36,7 @@ pub struct AnalyzerMode {
     active: bool,
     display_history: Vec<SerialStateMessage>,
     scroll_offset: u32,
+    analyzer_cursor_line: usize,
     analyzer_cursor_pos: usize,
     analyzer_endianness: Endianness,
     active_display_mode: DisplayMode,
@@ -47,10 +48,16 @@ impl AnalyzerMode {
             active: false,
             display_history: vec![],
             scroll_offset: 0,
+            analyzer_cursor_line: 0,
             analyzer_cursor_pos: 0,
             analyzer_endianness: Endianness::Little,
             active_display_mode: DisplayMode::Hex,
         }
+    }
+
+    pub(crate) fn add_to_history(&mut self, arg: &str) {
+        let msg = SerialStateMessage::ErrorEvent(arg.to_string());
+        self.display_history.push(msg);
     }
 }
 
@@ -59,8 +66,11 @@ impl ApplicationMode for AnalyzerMode {
         match key_event.code {
             KeyCode::Left => self.cursor_left(),
             KeyCode::Right => self.cursor_right(),
-            KeyCode::Up => self.scroll_up(),
-            KeyCode::Down => self.scroll_down(),
+            KeyCode::Up => self.scroll_analyzer_cursor_up(),
+            KeyCode::Down => self.scroll_analyzer_cursor_down(),
+            KeyCode::PageUp => self.scroll_up(),
+            KeyCode::PageDown => self.scroll_down(),
+
             //KeyCode::F(2) => self.settingsmode.rotate_display_mode(),
             KeyCode::Char('e') => self.rotate_analyzer_endianness(),
             _ => {}
@@ -98,6 +108,14 @@ impl AnalyzerMode {
     /// Scroll up in the display history, moving the top line down by one.
     pub fn scroll_up(&mut self) {
         self.scroll_offset = self.scroll_offset.saturating_add(1);
+    }
+
+    pub fn scroll_analyzer_cursor_up(&mut self) {
+        self.analyzer_cursor_line += 1;
+    }
+
+    pub fn scroll_analyzer_cursor_down(&mut self) {
+        self.analyzer_cursor_line = self.analyzer_cursor_line.saturating_sub(1);
     }
 
     /// Scroll down in the display history, moving the top line up by one.
@@ -224,7 +242,7 @@ impl AnalyzerMode {
                         let mut post_cursor_color = ratatui::style::Color::Black;
 
                         if self.active_display_mode == DisplayMode::Hex
-                            && line_index == 0
+                            && line_index == self.analyzer_cursor_line
                             && self.active
                         {
                             // the cursor pos is always a multiple of 3:
@@ -298,7 +316,7 @@ impl AnalyzerMode {
         let mut items: Vec<String> = vec![];
         // Use the cursor position to obtain the analyzer data: 1 byte, 2 byte, 4 bytes
         let one_byte = analyzer_data[self.analyzer_cursor_pos];
-        items.push(format!("binary {:08b}", one_byte));
+        items.push(format!("binary (MSB first): {:08b}", one_byte));
         items.push(format!("u8: {}", one_byte));
 
         if (self.analyzer_cursor_pos as i32) <= (analyzer_data.len() as i32 - 2) {

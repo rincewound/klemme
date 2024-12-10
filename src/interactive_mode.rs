@@ -60,12 +60,15 @@ pub struct InteractiveMode {
     input_mode: InputMode,
     command_sender: Sender<SerialCommand>,
     crlf: CRLFSetting,
+    retain_input: bool,
 }
 
 impl ApplicationMode for InteractiveMode {
     fn handle_key_event(&mut self, key_event: crossterm::event::KeyEvent) {
         match key_event.code {
             KeyCode::F(4) => self.rotate_crlf_setting(),
+            KeyCode::F(3) => self.rotate_input_mode(),
+            KeyCode::F(5) => self.toggle_retain_input(),
             KeyCode::Char(x) => {
                 if self.input_mode == InputMode::Hex {
                     if x.is_ascii_hexdigit() || x == ' ' {
@@ -101,7 +104,10 @@ impl ApplicationMode for InteractiveMode {
             format!(": {} ", self.input_mode).fg(ratatui::style::Color::Gray),
             format!("CRLF").fg(ratatui::style::Color::Gray),
             "(F4)".fg(highlight_color),
-            format!(": {}", self.crlf).fg(ratatui::style::Color::Gray),
+            format!(": {} ", self.crlf).fg(ratatui::style::Color::Gray),
+            format!("Retain Input").fg(ratatui::style::Color::Gray),
+            "(F5)".fg(highlight_color),
+            format!(": {} ", self.retain_input).fg(ratatui::style::Color::Gray),
         ]);
 
         let block = Block::bordered()
@@ -127,6 +133,7 @@ impl InteractiveMode {
             input_mode: InputMode::Default,
             command_sender,
             crlf: CRLFSetting::None,
+            retain_input: false,
         }
     }
 
@@ -152,51 +159,57 @@ impl InteractiveMode {
     }
 
     /// if hex input, convert data to bytes by aggregating 2 hex chars into one byte
-    fn apply_input_mode(&mut self) {
+    fn apply_input_mode(&mut self, input: Vec<u8>) -> Vec<u8> {
         // if hex input, convert data to bytes by aggregating 2 hex chars into one byte
         if self.input_mode == InputMode::Hex {
             let mut new_buffer: Vec<u8> = vec![];
             let mut idx: usize = 0;
-            while idx < self.send_buffer.len() - 1 {
-                if self.send_buffer[idx] as char == ' ' {
+            while idx < input.len() - 1 {
+                if input[idx] as char == ' ' {
                     idx += 1;
                     continue;
                 }
-                let b0 = (self.send_buffer[idx] as char).to_digit(16).unwrap() as u8;
-                let b1 = (self.send_buffer[idx + 1] as char).to_digit(16).unwrap() as u8;
+                let b0 = (input[idx] as char).to_digit(16).unwrap() as u8;
+                let b1 = (input[idx + 1] as char).to_digit(16).unwrap() as u8;
                 new_buffer.push(self.two_hex_bytes_to_char(b0, b1) as u8);
                 idx += 2;
             }
-            self.send_buffer = new_buffer;
+            return new_buffer;
         }
+        input.clone()
     }
 
     /// Adds the necessary CRLF bytes to the send buffer according to the
     /// current CRLF setting.
-    fn apply_crlf_setting(&mut self) {
+    fn apply_crlf_setting(&mut self, input: Vec<u8>) -> Vec<u8> {
+        let mut res = input.clone();
         match self.crlf {
             CRLFSetting::CRLF => {
-                self.send_buffer.push(b'\r');
-                self.send_buffer.push(b'\n');
+                res.push(b'\r');
+                res.push(b'\n');
             }
             CRLFSetting::LF => {
-                self.send_buffer.push(b'\n');
+                res.push(b'\n');
             }
             CRLFSetting::CR => {
-                self.send_buffer.push(b'\r');
+                res.push(b'\r');
             }
             _ => {}
         }
+        return res;
     }
 
     /// Sends the contents of the `send_buffer` to the serial port.
     /// The contents of `send_buffer` are processed according to the current
     /// `input_mode` and `crlf` settings before being sent.
     fn send_tx_buffer(&mut self) {
-        self.apply_input_mode();
-        self.apply_crlf_setting();
-        self.send_command(SerialCommand::Send(self.send_buffer.clone()));
-        self.send_buffer.clear();
+        let mut the_buffer = self.send_buffer.clone();
+        the_buffer = self.apply_input_mode(the_buffer);
+        the_buffer = self.apply_crlf_setting(the_buffer);
+        self.send_command(SerialCommand::Send(the_buffer));
+        if !self.retain_input {
+            self.send_buffer.clear();
+        }
     }
 
     /// Rotates the input mode through the list of available input modes. The input modes
@@ -210,6 +223,7 @@ impl InteractiveMode {
         selected_idx += 1;
         selected_idx %= INPUT_MODES.len();
         self.input_mode = INPUT_MODES[selected_idx];
+        self.send_buffer.clear();
     }
 
     /// Rotates the CRLF setting.
@@ -231,5 +245,9 @@ impl InteractiveMode {
 
     fn send_command(&self, cmd: SerialCommand) {
         self.command_sender.send(cmd).unwrap();
+    }
+
+    fn toggle_retain_input(&mut self) {
+        self.retain_input = !self.retain_input;
     }
 }

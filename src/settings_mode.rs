@@ -10,7 +10,7 @@ use ratatui::{
 
 use crate::{
     mode::ApplicationMode,
-    portthread::SerialContext,
+    portthread::{PortError, SerialContext},
     serialtypes::{BAUD_RATES, DATABITS, PARITY, STOP_BITS},
     DisplayMode, DISPLAY_MODES,
 };
@@ -35,7 +35,6 @@ impl ApplicationMode for SettingsMode {
             KeyCode::Char('a') => self.rotate_parity(),
             KeyCode::Char('d') => self.rotate_databits(),
             KeyCode::Char('m') => self.rotate_display_mode(),
-            //KeyCode::Enter => app.enter_interactive_mode(),
             _ => {}
         }
     }
@@ -98,7 +97,7 @@ impl SettingsMode {
         self.display_mode
     }
 
-    pub fn create_serial_context(&self) -> SerialContext {
+    pub fn create_serial_context(&self) -> Result<SerialContext, PortError> {
         let the_port = serial2::SerialPort::open(&self.port, |mut settings: serial2::Settings| {
             let _ = settings.set_baud_rate(self.baud);
             let stop_bits = match self.stopbits {
@@ -137,15 +136,24 @@ impl SettingsMode {
             Ok(settings)
         });
 
-        let mut p = the_port.expect("Failed to open port with given settings.");
-        p.set_read_timeout(Duration::from_millis(125))
-            .expect("Failed to set read timeout.");
-        p.set_write_timeout(Duration::from_millis(2500))
-            .expect("Failed to set write timeout.");
-        p.flush().expect("Failed to flush port.");
-        let _ = p.discard_buffers();
-        let ctx = SerialContext::new(self.port.clone(), p);
-        ctx
+        if let Ok(mut p) = the_port {
+            if let Err(_) = p.set_read_timeout(Duration::from_millis(125)) {
+                return Err(PortError::BadSettings);
+            }
+            if let Err(_) = p.set_write_timeout(Duration::from_millis(2500)) {
+                return Err(PortError::BadSettings);
+            }
+            if let Err(_) = p.flush() {
+                return Err(PortError::FailedToFlush);
+            }
+            if let Err(_) = p.discard_buffers() {
+                return Err(PortError::BadSettings);
+            }
+
+            return Ok(SerialContext::new(self.port.clone(), p));
+        } else {
+            return Err(PortError::FailedToOpen);
+        }
     }
 
     /// Rotates the serial port to the next available serial port.
