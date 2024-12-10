@@ -54,11 +54,12 @@ Normal --> Analyzer
 
 ### Interactive
 
-* F3 - Change input mode
 * Up - Scroll Receive Buffer Up
 * Down - Scroll Receive Buffer Down
 * Enter - Send current send buffer (according to CRLF and Input settings)
+* F3 - Change input mode
 * F4 - Change CRLF mode
+* F5 - Retain input (don't clear TX after sending)
 
 ### Analyzer
 
