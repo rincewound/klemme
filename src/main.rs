@@ -75,6 +75,7 @@ impl Default for App {
         let (stx, rtx): (Sender<SerialStateMessage>, Receiver<SerialStateMessage>) =
             mpsc::channel();
         let (tx, rx): (Sender<SerialCommand>, Receiver<SerialCommand>) = mpsc::channel();
+        let settings = settings_mode::SettingsMode::new();
         portthread::port_background_thread(rx, stx);
 
         let data = App {
@@ -82,7 +83,7 @@ impl Default for App {
             exit: false,
             command_sender: tx.clone(),
             state_receiver: rtx,
-            settingsmode: settings_mode::SettingsMode::new(),
+            settingsmode: settings,
             analyzermode: analyzer_mode::AnalyzerMode::new(),
             interactivemode: interactive_mode::InteractiveMode::new(tx),
         };
@@ -241,9 +242,14 @@ impl App {
     /// This function will panic if there is a failure in opening the serial port or setting
     /// the read/write timeouts.
     fn enter_interactive_mode(&mut self) {
-        let ctx = self.settingsmode.create_serial_context();
-        self.send_command(SerialCommand::Start(ctx));
-        self.enable_mode(mode::Mode::Interactive);
+        if let Ok(ctx) = self.settingsmode.create_serial_context() {
+            self.send_command(SerialCommand::Stop);
+            self.send_command(SerialCommand::Start(ctx));
+            self.enable_mode(mode::Mode::Interactive);
+        } else {
+            self.analyzermode
+                .add_to_history("Failed to open serial port");
+        }
     }
 
     /// Exits the current mode and enters the settings mode, which is a mode where the user can adjust

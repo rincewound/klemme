@@ -54,6 +54,11 @@ impl AnalyzerMode {
             active_display_mode: DisplayMode::Hex,
         }
     }
+
+    pub(crate) fn add_to_history(&mut self, arg: &str) {
+        let msg = SerialStateMessage::ErrorEvent(arg.to_string());
+        self.display_history.push(msg);
+    }
 }
 
 impl ApplicationMode for AnalyzerMode {

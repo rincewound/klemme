@@ -4,6 +4,12 @@ use std::{
     thread, vec,
 };
 
+pub enum PortError {
+    BadSettings,
+    FailedToFlush,
+    FailedToOpen,
+}
+
 #[derive(Debug)]
 pub struct SerialContext {
     port_name: String,
