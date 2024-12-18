@@ -12,6 +12,7 @@ use ratatui::{
     layout::{Constraint, Layout, Rect},
     DefaultTerminal, Frame,
 };
+use serde::{Deserialize, Serialize};
 
 use std::sync::mpsc;
 use std::sync::mpsc::{Receiver, Sender};
@@ -31,7 +32,7 @@ const DISPLAY_MODES: [DisplayMode; 5] = [
     DisplayMode::MixedDec,
 ];
 
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub enum DisplayMode {
     Decimal,
     Hex,
@@ -180,6 +181,10 @@ impl App {
         }
         if key_event.code == KeyCode::F(2) {
             self.settingsmode.rotate_display_mode();
+        }
+
+        if key_event.code == KeyCode::F(9) {
+            self.analyzermode.rotate_time_display_mode();
         }
 
         if key_event.code == KeyCode::F(10) {

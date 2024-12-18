@@ -8,6 +8,9 @@ use ratatui::{
     widgets::{Block, Paragraph},
 };
 
+use serde::{Deserialize, Serialize};
+use snafu::{prelude::*, Whatever};
+
 use crate::{
     mode::ApplicationMode,
     portthread::{PortError, SerialContext},
@@ -15,7 +18,7 @@ use crate::{
     DisplayMode, DISPLAY_MODES,
 };
 
-#[derive(Debug)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct SettingsMode {
     port: String,
     baud: u32,
@@ -23,6 +26,7 @@ pub struct SettingsMode {
     parity: String,
     databits: u8,
     display_mode: DisplayMode,
+    #[serde(skip_serializing, default)]
     active: bool,
 }
 
@@ -37,6 +41,7 @@ impl ApplicationMode for SettingsMode {
             KeyCode::Char('m') => self.rotate_display_mode(),
             _ => {}
         }
+        self.try_write_config_file();
     }
 
     fn render(&self, area: ratatui::prelude::Rect, buf: &mut ratatui::Frame) {
@@ -79,7 +84,39 @@ impl ApplicationMode for SettingsMode {
 }
 
 impl SettingsMode {
+    fn try_load_config_file() -> Result<SettingsMode, Whatever> {
+        // if a .klemme file is present in the CWD, try
+        // to deserialize settings from it:
+        let path = std::env::current_dir().unwrap();
+        let path = path.to_str().unwrap();
+        if let Ok(file) = std::fs::File::open(path.to_owned() + "/.klemme") {
+            let reader = std::io::BufReader::new(file);
+            let res: Result<SettingsMode, serde_json::Error> = serde_json::from_reader(reader);
+
+            if let Ok(settings) = res {
+                return Ok(settings);
+            }
+            return res.with_whatever_context(|_| "Failed to deserialize .klemme file");
+        }
+        whatever!("no .klemme file found in CWD")
+    }
+
+    fn try_write_config_file(&self) {
+        // if a .klemme file is present in the CWD, try
+        // to deserialize settings from it:
+        let path = std::env::current_dir().unwrap();
+        let path = path.to_str().unwrap();
+        let file = std::fs::File::create(path.to_owned() + "/.klemme").unwrap();
+        let writer = std::io::BufWriter::new(file);
+        let _ = serde_json::to_writer_pretty(writer, &self);
+    }
+
     pub fn new() -> SettingsMode {
+        match SettingsMode::try_load_config_file() {
+            Ok(settings) => return settings,
+            Err(_) => {}
+        };
+
         let mut res = Self {
             port: "".to_string(),
             baud: BAUD_RATES[0],

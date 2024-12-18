@@ -12,20 +12,19 @@ for developers. klemme is a mode based application, i.e. at any given time it ca
 
 * Supports common baud rates & port settings
 * Wide range of display modes that can be applied retro actively
+* Uses less than 2 MB RAM in most circumstances
 
 ## Modes
 
 ```mermaid
 flowchart
 Normal --> Settings
-Settings --> Normal
 Normal --> Interactive
-Interactive --> Normal
-Interactive --> Analyzer
-Analyzer --> Normal
-Analyzer --> Interactive
-Settings --> Interactive
 Normal --> Analyzer
+Settings --> Normal
+Settings --> Interactive
+Interactive --> Normal
+Analyzer --> Normal
 ```
 
 ## Keys
@@ -34,6 +33,7 @@ Normal --> Analyzer
 
 * esc - Change to normal mode
 * F2 - Change display mode
+* F9 - Toggle timing display mode
 * F10 - Clear history
 
 ### Normal Mode
@@ -100,3 +100,7 @@ Examples:
 * Input: AB CF  Output Bytes: 0xAB, 0xCF
 * Input: BCEF Output Bytes: 0xBC 0xEF
 * Input: B C DF Output Bytes: 0xBC 0xDF
+
+## Settings
+
+klemme will attempt to store a .klemme file in the folder it is executed in.
