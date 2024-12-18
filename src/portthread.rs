@@ -176,10 +176,7 @@ pub fn port_background_thread(rx: Receiver<SerialCommand>, tx: Sender<SerialStat
 }
 
 
-fn send_receive(ctx: &SerialContext, last_entry: &mut HistoryEntry, mut data_to_send: Vec<u8>, tx: &Sender<SerialStateMessage>) {
-
-    
-
+fn send_receive(ctx: &SerialContext, last_entry: &mut HistoryEntry, mut data_to_send: Vec<u8>, tx: &Sender<SerialStateMessage>) {    
     if let Some(p) = &ctx.com_port {
         if data_to_send.len() != 0 {
             if let Ok(_) = p.write(&data_to_send) {

@@ -19,14 +19,12 @@ for developers. klemme is a mode based application, i.e. at any given time it ca
 ```mermaid
 flowchart
 Normal --> Settings
-Settings --> Normal
 Normal --> Interactive
-Interactive --> Normal
-Interactive --> Analyzer
-Analyzer --> Normal
-Analyzer --> Interactive
-Settings --> Interactive
 Normal --> Analyzer
+Settings --> Normal
+Settings --> Interactive
+Interactive --> Normal
+Analyzer --> Normal
 ```
 
 ## Keys
@@ -35,6 +33,7 @@ Normal --> Analyzer
 
 * esc - Change to normal mode
 * F2 - Change display mode
+* F9 - Toggle timing display mode
 * F10 - Clear history
 
 ### Normal Mode

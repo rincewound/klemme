@@ -183,6 +183,10 @@ impl App {
             self.settingsmode.rotate_display_mode();
         }
 
+        if key_event.code == KeyCode::F(9) {
+            self.analyzermode.rotate_time_display_mode();
+        }
+
         if key_event.code == KeyCode::F(10) {
             self.analyzermode.clear_history();
         }

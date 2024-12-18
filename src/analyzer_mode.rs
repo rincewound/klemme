@@ -10,11 +10,38 @@ use ratatui::{
 };
 
 use crate::{
-    mode::ApplicationMode,
-    portthread::{RxTx, SerialStateMessage},
-    serialtypes::control_char_to_string,
-    DisplayMode,
+    mode::ApplicationMode, portthread::{RxTx, SerialStateMessage}, serialtypes::control_char_to_string, DisplayMode
 };
+
+
+const TIME_INFORMATION_MODES: [TimeInformationMode; 2] = [
+    TimeInformationMode::None,
+    // TimeInformationMode::Delta,
+    TimeInformationMode::Absolute,
+    // TimeInformationMode::AbsoluteWithDelta,
+];
+
+#[derive(Debug, Default, PartialEq, Clone, Copy)]
+pub enum TimeInformationMode
+{
+    None,
+    // Delta,
+    #[default]
+    Absolute,
+    // AbsoluteWithDelta,
+}
+
+impl Display for TimeInformationMode {
+
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            TimeInformationMode::None => write!(f, "None"),
+            // TimeInformationMode::Delta => write!(f, "Delta"),
+            TimeInformationMode::Absolute => write!(f, "Absolute"),
+            // TimeInformationMode::AbsoluteWithDelta => write!(f, "Absolute with Delta"),
+        }
+    }
+}
 
 #[derive(Debug, Default, PartialEq)]
 pub enum Endianness {
@@ -40,6 +67,7 @@ pub struct AnalyzerMode {
     analyzer_cursor_pos: usize,
     analyzer_endianness: Endianness,
     active_display_mode: DisplayMode,
+    active_time_display_mode: TimeInformationMode,
 }
 
 impl AnalyzerMode {
@@ -52,6 +80,7 @@ impl AnalyzerMode {
             analyzer_cursor_pos: 0,
             analyzer_endianness: Endianness::Little,
             active_display_mode: DisplayMode::Hex,
+            active_time_display_mode: TimeInformationMode::None,
         }
     }
 
@@ -143,6 +172,16 @@ impl AnalyzerMode {
         }
     }
 
+    pub fn rotate_time_display_mode(&mut self) {
+        let mut selectd_index = TIME_INFORMATION_MODES
+            .iter()
+            .position(|x| *x == self.active_time_display_mode)
+            .unwrap_or(0);
+        selectd_index += 1;
+        selectd_index %= TIME_INFORMATION_MODES.len();
+        self.active_time_display_mode = TIME_INFORMATION_MODES[selectd_index];
+    }
+
     pub fn update_data(
         &mut self,
         data_source: &Receiver<SerialStateMessage>,
@@ -220,8 +259,19 @@ impl AnalyzerMode {
         }
     }
 
+    fn select_time_format_string(&self) -> String {
+        match self.active_time_display_mode {
+            TimeInformationMode::Absolute => "%H:%M:%S%.3f ".to_string(),
+            // TimeInformationMode::Delta => "%H:%M:%S%.3f ".to_string(),
+            TimeInformationMode::None => "".to_string(),
+            // TimeInformationMode::AbsoluteWithDelta => format!("%H:%M:%S%.3f[+{} ms] ", delta_to_prev),
+        }
+        .to_string()
+    }
+
     fn build_list_items(&self, analyzer_data: &mut Vec<u8>, max_num_rows: usize) -> Vec<Line<'_>> {
         let mut line_index = 0;
+
         let items: Vec<Line> = self
             .display_history
             .iter()
@@ -263,7 +313,7 @@ impl AnalyzerMode {
                             *analyzer_data = x.data.to_vec();
                         }
 
-                        let time_string = x.timestamp.format("%H:%M:%S%.3f ").to_string();
+                        let time_string = x.timestamp.format(&self.select_time_format_string()).to_string();
 
                         let ln = Line::from(vec![
                             time_string.fg(ratatui::style::Color::Gray),
