@@ -263,7 +263,10 @@ impl AnalyzerMode {
                             *analyzer_data = x.data.to_vec();
                         }
 
+                        let time_string = x.timestamp.format("%H:%M:%S%.3f ").to_string();
+
                         let ln = Line::from(vec![
+                            time_string.fg(ratatui::style::Color::Gray),
                             x.rx_tx.to_string().fg(if x.rx_tx == RxTx::Tx {
                                 ratatui::style::Color::Green
                             } else {

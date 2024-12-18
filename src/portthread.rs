@@ -1,8 +1,8 @@
 use std::{
-    fmt::Display,
-    sync::mpsc::{Receiver, Sender},
-    thread, vec,
+    fmt::Display, sync::mpsc::{Receiver, Sender}, thread, vec
 };
+
+use chrono::{DateTime, Local};
 
 pub enum PortError {
     BadSettings,
@@ -31,7 +31,7 @@ impl PartialEq for SerialContext {
     }
 }
 
-#[derive(Debug, Default, PartialEq)]
+#[derive(Debug, Default, PartialEq, Clone)]
 pub enum RxTx {
     #[default]
     Rx,
@@ -47,10 +47,21 @@ impl Display for RxTx {
     }
 }
 
-#[derive(Debug, Default, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct HistoryEntry {
+    pub timestamp: DateTime<Local>,
     pub rx_tx: RxTx,
     pub data: vec::Vec<u8>,
+}
+
+impl Default for HistoryEntry {
+    fn default() -> Self {
+        Self {
+            timestamp: Local::now(),
+            rx_tx: RxTx::Rx,
+            data: vec![]
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -126,6 +137,8 @@ fn receive_command(state: &PortThreadState, rx: &Receiver<SerialCommand>) -> Opt
 pub fn port_background_thread(rx: Receiver<SerialCommand>, tx: Sender<SerialStateMessage>) {
     thread::spawn(move || {
         let mut state = PortThreadState::Stopped;
+        let mut last_entry = HistoryEntry::default();
+
         loop {
             let mut data_to_send: Vec<u8> = vec![];
 
@@ -155,18 +168,23 @@ pub fn port_background_thread(rx: Receiver<SerialCommand>, tx: Sender<SerialStat
             match state {
                 PortThreadState::Stopped => {}
                 PortThreadState::Running(ref ctx) => {
-                    send_receive(ctx, data_to_send, &tx);
+                    send_receive(ctx, &mut last_entry, data_to_send, &tx);
                 }
             }
         }
     });
 }
 
-fn send_receive(ctx: &SerialContext, mut data_to_send: Vec<u8>, tx: &Sender<SerialStateMessage>) {
+
+fn send_receive(ctx: &SerialContext, last_entry: &mut HistoryEntry, mut data_to_send: Vec<u8>, tx: &Sender<SerialStateMessage>) {
+
+    
+
     if let Some(p) = &ctx.com_port {
         if data_to_send.len() != 0 {
             if let Ok(_) = p.write(&data_to_send) {
                 let entry = HistoryEntry {
+                    timestamp: Local::now(),
                     rx_tx: RxTx::Tx,
                     data: data_to_send.clone(),
                 };
@@ -181,13 +199,34 @@ fn send_receive(ctx: &SerialContext, mut data_to_send: Vec<u8>, tx: &Sender<Seri
         // receive data:
         let mut buffer: [u8; 256] = [0u8; 256];
         if let Ok(data) = p.read(&mut buffer) {
+            /*
+                How this works:
+                Since we occasionally get several reads at the same timestamp,
+                we aggregate everything we receive withinin a small number of
+                milliseconds into one entry.
+             */
+
             let received_bytes = buffer[0..data].to_vec();
 
-            let entry = HistoryEntry {
+            let mut entry = HistoryEntry {
+                timestamp: Local::now(),
                 rx_tx: RxTx::Rx,
                 data: received_bytes,
             };
-            tx.send(SerialStateMessage::DataEvent(entry)).unwrap();
+
+            let ms = (entry.timestamp - last_entry.timestamp).num_milliseconds();
+
+            if ms < 5
+            {
+                last_entry.data.append(&mut entry.data);
+            }
+            else {
+                tx.send(SerialStateMessage::DataEvent(last_entry.clone())).unwrap();    
+                last_entry.data = vec![];
+                last_entry.timestamp = Local::now();                
+            }
+
+            
             data_to_send.clear();
         }
     }
