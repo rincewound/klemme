@@ -176,15 +176,15 @@ pub fn port_background_thread(rx: Receiver<SerialCommand>, tx: Sender<SerialStat
 }
 
 
-fn send_receive(ctx: &SerialContext, last_entry: &mut HistoryEntry, mut data_to_send: Vec<u8>, tx: &Sender<SerialStateMessage>) {    
+fn send_receive(ctx: &SerialContext, last_entry: &mut HistoryEntry, data_to_send: Vec<u8>, tx: &Sender<SerialStateMessage>) {    
     if let Some(p) = &ctx.com_port {
         if data_to_send.len() != 0 {
             if let Ok(_) = p.write(&data_to_send) {
                 let entry = HistoryEntry {
                     timestamp: Local::now(),
                     rx_tx: RxTx::Tx,
-                    data: data_to_send.clone(),
-                };
+                    data: data_to_send,
+                };                                            
                 tx.send(SerialStateMessage::DataEvent(entry)).unwrap();
             } else {
                 tx.send(SerialStateMessage::ErrorEvent(
@@ -201,30 +201,85 @@ fn send_receive(ctx: &SerialContext, last_entry: &mut HistoryEntry, mut data_to_
                 Since we occasionally get several reads at the same timestamp,
                 we aggregate everything we receive withinin a small number of
                 milliseconds into one entry.
-             */
-
-            let received_bytes = buffer[0..data].to_vec();
-
-            let mut entry = HistoryEntry {
-                timestamp: Local::now(),
-                rx_tx: RxTx::Rx,
-                data: received_bytes,
-            };
-
-            let ms = (entry.timestamp - last_entry.timestamp).num_milliseconds();
-
-            if ms < 5
-            {
-                last_entry.data.append(&mut entry.data);
-            }
-            else {
-                tx.send(SerialStateMessage::DataEvent(last_entry.clone())).unwrap();    
-                last_entry.data = vec![];
-                last_entry.timestamp = Local::now();                
-            }
-
-            
-            data_to_send.clear();
+             */        
+            handle_received_bytes(last_entry, buffer[0..data].to_vec(), tx);
         }
     }
+}
+
+fn handle_received_bytes(last_entry: &mut HistoryEntry, received_data: Vec<u8>, tx: &Sender<SerialStateMessage>) {
+
+    let mut entry = HistoryEntry {
+        timestamp: Local::now(),
+        rx_tx: RxTx::Rx,
+        data: received_data,
+    };    
+    let ms = (entry.timestamp - last_entry.timestamp).num_milliseconds();
+
+    if ms < 5
+    {
+        last_entry.data.append(&mut entry.data);
+    }
+    else {
+        tx.send(SerialStateMessage::DataEvent(last_entry.clone())).unwrap();    
+        last_entry.data = entry.data;
+        last_entry.timestamp = Local::now();                
+    } 
+}
+
+// Tests        
+#[cfg(test)]
+mod tests {
+    use std::sync::mpsc;
+
+    use chrono::Days;
+
+    use super::*;
+
+    #[test]
+    fn test_handle_received_bytes() {
+        let mut last_entry = HistoryEntry::default();
+        let (tx, _) = mpsc::channel();
+        let received_data = vec![0x01, 0x02, 0x03, 0x04, 0x05, 0x06];
+        handle_received_bytes(&mut last_entry, received_data, &tx);
+        // simple case, no aggregation of data:
+        assert_eq!(last_entry.data, vec![0x01, 0x02, 0x03, 0x04, 0x05, 0x06]);
+    }
+
+    // Test aggregation of data in case of a short period of time:
+    #[test]
+    fn test_handle_received_bytes_aggregation() {
+
+        let mut last_entry = HistoryEntry::default();
+
+        let (tx, _) = mpsc::channel();
+
+        let received_data = vec![0x01, 0x02, 0x03, 0x04, 0x05, 0x06];
+        last_entry.timestamp = Local::now();
+        handle_received_bytes(&mut last_entry, received_data, &tx);
+        let received_data = vec![0x01, 0x02, 0x03, 0x04, 0x05, 0x06];
+        handle_received_bytes(&mut last_entry, received_data, &tx);
+        // simple case, no aggregation of data:
+        assert_eq!(last_entry.data, vec![0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06]);
+    }
+
+    // Test, will emit message, if time threshold is exceeded:
+    #[test]
+    fn test_handle_received_bytes_emits_message() {
+        let mut last_entry = HistoryEntry::default();
+        let (tx, rx) = mpsc::channel();
+        let received_data = vec![0x01, 0x02, 0x03, 0x04, 0x05, 0x06];        
+        handle_received_bytes(&mut last_entry, received_data, &tx);
+        let received_data = vec![0x03, 0x04, 0x05, 0x06, 0x07, 0x08];
+        last_entry.timestamp = Local::now().checked_sub_days(Days::new(1)).unwrap();
+        let _ = handle_received_bytes(&mut last_entry, received_data, &tx);
+        // simple case, no aggregation of data:
+        assert_eq!(last_entry.data, vec![0x03, 0x04, 0x05, 0x06, 0x07, 0x08]);
+        let recv = rx.recv().expect("Need message here!");
+        if let SerialStateMessage::DataEvent(msg) = recv {
+            assert_eq!(msg.data, vec![0x01, 0x02, 0x03, 0x04, 0x05, 0x06]);
+        }
+
+    }
+
 }

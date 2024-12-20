@@ -51,6 +51,7 @@ Analyzer --> Normal
 * a - select parity
 * d - select databits
 * m - select display mode
+* Return - Enter interactive mode
 
 ### Interactive
 
